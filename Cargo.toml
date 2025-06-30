@@ -1,0 +1,14 @@
+[package]
+name = "xlsx"
+version = "0.0.1"
+edition = "2021"
+
+# See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
+[lib]
+name = "xlsx"
+crate-type = ["cdylib"]
+
+[dependencies]
+cargo-llvm-cov = "0.6.14"
+pyo3 = { version = "0.25.0", features = ["extension-module", "abi3-py39"] }
+umya-spreadsheet = "2.3.0"
