@@ -5,7 +5,7 @@ mod xlsx {
 use pyo3::prelude::*;
 use umya_spreadsheet::reader;
 
-use crate::sample_ext_lib::book::Book;
+use crate::xlsx::book::Book;
 
 #[pyfunction]
 fn hello_from_bin() -> String {
