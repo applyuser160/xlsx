@@ -1,5 +1,6 @@
 mod xlsx {
     pub mod book;
+    pub mod test_book;
 }
 
 use pyo3::prelude::*;
