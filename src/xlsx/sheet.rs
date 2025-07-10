@@ -17,15 +17,9 @@ impl Sheet {
         format!("<Sheet name='{}'>", self.name)
     }
 
-    pub fn __getitem__(&mut self, key: String, py: Python) -> PyObject {
-        if key.contains(':') {
-            let vec: Vec<String> = self.value.get_cell_value_by_range(&key)
-                .into_iter().map(|v| v.get_value().to_string()).collect();
-            return vec.into_py(py);
-        }
+    pub fn __getitem__(&mut self, key: String, py: Python) -> Cell {
         let cell_ref = self.value.get_cell_mut(key);
-        let cell = Cell::new(cell_ref);
-        cell.into_py(py)
+        Cell::new(cell_ref)
     }
 
     pub fn cell(&mut self, row: usize, col: usize) -> Cell {
