@@ -5,7 +5,7 @@ use umya_spreadsheet::{reader, Spreadsheet, Worksheet};
 pub struct Book {
     #[pyo3(get, set)]
     pub path: String,
-    value: Spreadsheet
+    value: Spreadsheet,
 }
 
 #[pymethods]
@@ -26,7 +26,7 @@ impl Book {
         return match worksheet {
             Some(ws) => ws.get_value(address),
             None => "Sheet not found".to_string(),
-        }
+        };
     }
 }
 

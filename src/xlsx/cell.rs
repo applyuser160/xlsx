@@ -1,9 +1,9 @@
 use pyo3::prelude::*;
-use umya_spreadsheet::{Cell as UCell};
+use umya_spreadsheet::Cell as UCell;
 
 #[pyclass]
 pub struct Cell {
-    value: UCell
+    value: UCell,
 }
 
 #[pymethods]
@@ -23,6 +23,8 @@ impl Cell {
 
 impl Cell {
     pub fn new(value: &mut UCell) -> Self {
-        Cell { value: value.clone() }
+        Cell {
+            value: value.clone(),
+        }
     }
 }

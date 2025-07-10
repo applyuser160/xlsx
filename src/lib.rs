@@ -1,7 +1,7 @@
 mod xlsx {
     pub mod book;
-    pub mod sheet;
     pub mod cell;
+    pub mod sheet;
     pub mod test_book;
 }
 
@@ -9,8 +9,8 @@ use pyo3::prelude::*;
 use umya_spreadsheet::reader;
 
 use crate::xlsx::book::Book;
-use xlsx::sheet::Sheet;
 use xlsx::cell::Cell;
+use xlsx::sheet::Sheet;
 
 #[pyfunction]
 pub fn hello_from_bin() -> String {
@@ -21,7 +21,9 @@ pub fn hello_from_bin() -> String {
 pub fn read_file(path: String, sheet: String, address: String) -> String {
     let path = std::path::Path::new(&path);
     let book = reader::xlsx::read(path).unwrap();
-    book.get_sheet_by_name(&sheet.as_str()).unwrap().get_value(address)
+    book.get_sheet_by_name(&sheet.as_str())
+        .unwrap()
+        .get_value(address)
 }
 
 #[pyfunction]

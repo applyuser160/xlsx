@@ -7,12 +7,11 @@ use crate::xlsx::cell::Cell;
 pub struct Sheet {
     #[pyo3(get, set)]
     pub name: String,
-    value: Worksheet
+    value: Worksheet,
 }
 
 #[pymethods]
 impl Sheet {
-
     pub fn __repr__(&self) -> String {
         format!("<Sheet name='{}'>", self.name)
     }
@@ -41,5 +40,4 @@ impl Sheet {
     pub fn get_name(&self) -> &str {
         &self.name
     }
-
 }
