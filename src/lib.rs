@@ -3,14 +3,17 @@ mod xlsx {
     pub mod cell;
     pub mod sheet;
     pub mod test_book;
+    pub mod test_xml;
+    pub mod xml;
 }
 
 use pyo3::prelude::*;
 use umya_spreadsheet::reader;
 
-use crate::xlsx::book::Book;
+use xlsx::book::Book;
 use xlsx::cell::Cell;
 use xlsx::sheet::Sheet;
+use xlsx::xml::{Xml, XmlElement};
 
 #[pyfunction]
 pub fn hello_from_bin() -> String {
@@ -31,9 +34,6 @@ pub fn load_workbook(path: String) -> Book {
     Book::new(path)
 }
 
-/// A Python module implemented in Rust. The name of this function must match
-/// the `lib.name` setting in the `Cargo.toml`, else Python will not be able to
-/// import the module.
 #[pymodule]
 pub fn _core(m: &Bound<'_, PyModule>) -> PyResult<()> {
     m.add_function(wrap_pyfunction!(hello_from_bin, m)?)?;
@@ -42,5 +42,7 @@ pub fn _core(m: &Bound<'_, PyModule>) -> PyResult<()> {
     m.add_class::<Book>()?;
     m.add_class::<Sheet>()?;
     m.add_class::<Cell>()?;
+    m.add_class::<Xml>()?;
+    m.add_class::<XmlElement>()?;
     Ok(())
 }

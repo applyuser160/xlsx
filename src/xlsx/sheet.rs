@@ -16,7 +16,7 @@ impl Sheet {
         format!("<Sheet name='{}'>", self.name)
     }
 
-    pub fn __getitem__(&mut self, key: String, py: Python) -> Cell {
+    pub fn __getitem__(&mut self, key: String) -> Cell {
         let cell_ref = self.value.get_cell_mut(key);
         Cell::new(cell_ref)
     }
