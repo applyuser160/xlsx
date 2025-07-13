@@ -1,7 +1,7 @@
 #[cfg(test)]
 mod tests {
     use std::fs::{self, File};
-    use std::io::{BufReader, Read};
+    use std::io::Read;
     use std::path::Path;
 
     use crate::xlsx::xml::Xml;
@@ -62,6 +62,6 @@ mod tests {
         let buf = xml.to_buf();
 
         // Assert
-        assert!(buf.len() > 0);
+        assert!(!buf.is_empty());
     }
 }

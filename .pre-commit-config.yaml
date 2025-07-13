@@ -9,16 +9,12 @@ repos:
     rev: 22.10.0
     hooks:
     -   id: black
--   repo: local
+-   repo: https://github.com/doublify/pre-commit-rust
+    rev: v1.0
     hooks:
-    -   id: rust-fix-unused-imports
-        name: Remove unused imports with cargo clippy --fix
-        entry: cargo clippy --fix --allow-dirty --allow-staged -- -W unused-imports
-        language: system
-        types: [rust]
-
-    -   id: rustfmt
-        name: Format Rust code with rustfmt
-        entry: cargo fmt --all
-        language: system
-        types: [rust]
+    -   id: cargo-check
+        args: ["--workspace"]
+    -   id: fmt
+        args: ["--", "--check"]
+    -   id: clippy
+        args: ["--fix", "--allow-dirty", "--allow-staged", "--", "-W", "unused-imports"]

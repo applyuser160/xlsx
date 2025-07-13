@@ -36,7 +36,7 @@ pub struct XmlElement {
 
 impl Xml {
     pub fn new(contents: &String) -> Self {
-        let mut reader = Reader::from_str(&contents);
+        let mut reader = Reader::from_str(contents);
         let mut buf: Vec<u8> = Vec::new();
         let mut elements: Vec<XmlElement> = Vec::new();
         let mut decl: HashMap<String, String> = HashMap::new();
