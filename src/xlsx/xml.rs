@@ -2,15 +2,15 @@ use pyo3::prelude::*;
 use quick_xml::events::{BytesDecl, BytesEnd, BytesStart, BytesText, Event};
 use quick_xml::{Reader, Writer};
 use std::collections::HashMap;
-use std::fs::{File, OpenOptions};
-use std::io::{BufRead, BufReader, BufWriter, Write};
+use std::fs::OpenOptions;
+use std::io::{BufRead, BufWriter, Write};
 
 /// Xmlオブジェクト
 #[pyclass]
 #[derive(Debug, Clone)]
 pub struct Xml {
-    /// ファイルパス
-    pub path: String,
+    // /// ファイルパス
+    // pub path: String,
     /// XML宣言
     pub decl: HashMap<String, String>,
     /// タグリスト
@@ -35,10 +35,8 @@ pub struct XmlElement {
 }
 
 impl Xml {
-    pub fn new(path: &str) -> Self {
-        let file: File = File::open(path).unwrap();
-        let reader: BufReader<File> = BufReader::new(file);
-        let mut reader: Reader<BufReader<File>> = Reader::from_reader(reader);
+    pub fn new(contents: &String) -> Self {
+        let mut reader = Reader::from_str(&contents);
         let mut buf: Vec<u8> = Vec::new();
         let mut elements: Vec<XmlElement> = Vec::new();
         let mut decl: HashMap<String, String> = HashMap::new();
@@ -59,20 +57,15 @@ impl Xml {
             }
             buf.clear();
         }
-        Self {
-            path: path.to_string(),
-            decl,
-            elements,
-        }
+        Self { decl, elements }
     }
 
-    pub fn save(&self, path: Option<&str>) {
-        let save_path = path.unwrap_or(self.path.as_str());
+    pub fn save_file(&self, path: &str) {
         let file = OpenOptions::new()
             .write(true)
             .create(true)
             .truncate(true)
-            .open(save_path)
+            .open(path)
             .unwrap();
         let writer = BufWriter::new(file);
         let mut xml_writer = Writer::new(writer);
@@ -80,6 +73,21 @@ impl Xml {
         for element in &self.elements {
             Xml::write_element(&mut xml_writer, element);
         }
+    }
+
+    pub fn to_buf(&self) -> Vec<u8> {
+        let mut buffer = Vec::new();
+        let mut xml_writer = Writer::new(&mut buffer);
+
+        // XML宣言を書き込み
+        Xml::write_decl(&mut xml_writer, &self.decl);
+
+        // 各要素を書き込み
+        for element in &self.elements {
+            Xml::write_element(&mut xml_writer, element);
+        }
+
+        buffer
     }
 
     /// Xmlタグの解析(通常タグ)

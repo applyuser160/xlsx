@@ -1,6 +1,7 @@
 #[cfg(test)]
 mod tests {
-    use std::fs;
+    use std::fs::{self, File};
+    use std::io::{BufReader, Read};
     use std::path::Path;
 
     use crate::xlsx::xml::Xml;
@@ -10,12 +11,12 @@ mod tests {
         // 観点: xmlファイルが読み取れること
 
         // Act
-        let xml: Xml = Xml::new("data/sheet1.xml");
+        let mut file: File = File::open("data/sheet1.xml").unwrap();
+        let mut buf = String::new();
+        file.read_to_string(&mut buf).unwrap();
+        let xml: Xml = Xml::new(&buf);
 
         // Assert
-
-        // path
-        assert_eq!(xml.path, "data/sheet1.xml");
 
         // タグ
         assert_eq!(xml.elements.len(), 1);
@@ -25,7 +26,7 @@ mod tests {
     }
 
     #[test]
-    fn test_xml_write() {
+    fn test_xml_write_file() {
         // 観点: xmlファイルが作成されること
 
         // Arrange
@@ -37,12 +38,30 @@ mod tests {
         assert!(!Path::new("data/sheet2.xml").exists());
 
         // Act
-        let xml: Xml = Xml::new("data/sheet1.xml");
-        xml.save(Some("data/sheet2.xml"));
+        let mut file: File = File::open("data/sheet1.xml").unwrap();
+        let mut buf = String::new();
+        file.read_to_string(&mut buf).unwrap();
+        let xml: Xml = Xml::new(&buf);
+        xml.save_file("data/sheet2.xml");
 
         // Assert
 
         // ファイルが作成されること
         assert!(Path::new("data/sheet2.xml").exists());
+    }
+
+    #[test]
+    fn test_xml_to_buf() {
+        // 観点: xml文字列が作成されること
+
+        // Act
+        let mut file: File = File::open("data/sheet1.xml").unwrap();
+        let mut buf = String::new();
+        file.read_to_string(&mut buf).unwrap();
+        let xml: Xml = Xml::new(&buf);
+        let buf = xml.to_buf();
+
+        // Assert
+        assert!(buf.len() > 0);
     }
 }
