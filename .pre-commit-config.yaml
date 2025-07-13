@@ -15,6 +15,5 @@ repos:
     -   id: cargo-check
         args: ["--workspace"]
     -   id: fmt
-        args: ["--", "--check"]
     -   id: clippy
         args: ["--fix", "--allow-dirty", "--allow-staged", "--", "-W", "unused-imports"]

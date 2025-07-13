@@ -130,32 +130,9 @@ impl Book {
             FileOptions::default().compression_method(zip::CompressionMethod::Stored);
 
         // 構造体内のxmlを集合
-        let mut xmls: HashMap<String, Xml> = self.rels.clone();
-        xmls.insert(WORKBOOK_FILENAME.to_string(), self.workbook.clone());
-        xmls.insert(STYLES_FILENAME.to_string(), self.styles.clone());
-        xmls.insert(
-            SHARED_STRINGS_FILENAME.to_string(),
-            self.shared_strings.clone(),
-        );
-        xmls.extend(self.drawings.clone());
-        xmls.extend(self.worksheets.clone());
-        xmls.extend(self.themes.clone());
+        let xmls: HashMap<String, Xml> = self.merge_xmls();
 
-        let file_names: Vec<String> = archive.file_names().map(|s| s.to_string()).collect();
-        for filename in file_names {
-            if !xmls.contains_key(&filename) {
-                let mut file = archive.by_name(&filename).unwrap();
-                let mut contents: Vec<u8> = Vec::new();
-                file.read_to_end(&mut contents).unwrap();
-                zip_writer.start_file(&filename, options).unwrap();
-                zip_writer.write_all(&contents).unwrap();
-            }
-        }
-
-        for (file_name, xml) in xmls {
-            zip_writer.start_file(file_name, options).unwrap();
-            zip_writer.write_all(&xml.to_buf()).unwrap();
-        }
+        Book::write_file(&mut archive, &xmls, &mut zip_writer, &options);
     }
 
     pub fn copy(&self, path: &str) {
@@ -175,6 +152,16 @@ impl Book {
             FileOptions::default().compression_method(zip::CompressionMethod::Stored);
 
         // 構造体内のxmlを集合
+        let xmls: HashMap<String, Xml> = self.merge_xmls();
+
+        Book::write_file(&mut archive, &xmls, &mut zip_writer, &options);
+
+        // ファイルを閉じる（ZipWriterのdropで自動的に行われるが、明示的にfinishを呼ぶ）
+        zip_writer.finish().unwrap();
+    }
+
+    /// 構造体内のxmlを集合
+    fn merge_xmls(&self) -> HashMap<String, Xml> {
         let mut xmls: HashMap<String, Xml> = self.rels.clone();
         xmls.insert(WORKBOOK_FILENAME.to_string(), self.workbook.clone());
         xmls.insert(STYLES_FILENAME.to_string(), self.styles.clone());
@@ -185,25 +172,31 @@ impl Book {
         xmls.extend(self.drawings.clone());
         xmls.extend(self.worksheets.clone());
         xmls.extend(self.themes.clone());
+        xmls
+    }
 
+    /// ファイルへの書き込み
+    fn write_file<W: Write + std::io::Seek>(
+        archive: &mut ZipArchive<File>,
+        xmls: &HashMap<String, Xml>,
+        zip_writer: &mut ZipWriter<W>,
+        options: &FileOptions,
+    ) {
         let file_names: Vec<String> = archive.file_names().map(|s| s.to_string()).collect();
         for filename in file_names {
             if !xmls.contains_key(&filename) {
                 let mut file = archive.by_name(&filename).unwrap();
                 let mut contents: Vec<u8> = Vec::new();
                 file.read_to_end(&mut contents).unwrap();
-                zip_writer.start_file(&filename, options).unwrap();
+                zip_writer.start_file(&filename, *options).unwrap();
                 zip_writer.write_all(&contents).unwrap();
             }
         }
 
         for (file_name, xml) in xmls {
-            zip_writer.start_file(file_name, options).unwrap();
+            zip_writer.start_file(file_name, *options).unwrap();
             zip_writer.write_all(&xml.to_buf()).unwrap();
         }
-
-        // ファイルを閉じる（ZipWriterのdropで自動的に行われるが、明示的にfinishを呼ぶ）
-        zip_writer.finish().unwrap();
     }
 
     // pub fn get_sheet_by_name(&self, name: &String) -> Option<&Worksheet> {
