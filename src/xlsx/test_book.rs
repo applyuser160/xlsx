@@ -9,10 +9,10 @@ mod tests {
         // 観点: Excelファイルの読み取り
 
         // Act
-        let mut book = Book::new("data/sample.xlsx".to_string());
+        let book = Book::new("data/sample.xlsx".to_string());
 
         // Assert
-        let xml = book.xmls.get_mut("xl/worksheets/sheet1.xml").unwrap();
+        let xml = book.worksheets.get("xl/worksheets/sheet1.xml").unwrap();
         assert_eq!(xml.decl.get("version").unwrap(), "1.0");
         assert_eq!(xml.decl.get("encoding").unwrap(), "UTF-8");
         assert_eq!(xml.decl.get("standalone").unwrap(), "yes");
@@ -32,14 +32,14 @@ mod tests {
 
         // Act
         let mut book = Book::new("data/sample.xlsx".to_string());
-        let xml = book.xmls.get_mut("xl/worksheets/sheet1.xml").unwrap();
+        let xml = book.worksheets.get_mut("xl/worksheets/sheet1.xml").unwrap();
         let version = xml.decl.get_mut("version").unwrap();
         *version = "1.0".to_string();
         book.save();
 
         // Assert
         let mut book = Book::new("data/sample.xlsx".to_string());
-        let xml = book.xmls.get_mut("xl/worksheets/sheet1.xml").unwrap();
+        let xml = book.worksheets.get_mut("xl/worksheets/sheet1.xml").unwrap();
         assert_eq!(xml.decl.get("version").unwrap(), "1.0");
         assert_eq!(xml.decl.get("encoding").unwrap(), "UTF-8");
         assert_eq!(xml.decl.get("standalone").unwrap(), "yes");
@@ -47,7 +47,7 @@ mod tests {
 
     #[test]
     fn test_copy_book() {
-        // 観点: Excelファイルの新規保存
+        // 観点: Excelファイルの名前をつけて保存
 
         // Arrange
 
@@ -59,14 +59,14 @@ mod tests {
 
         // Act
         let mut book = Book::new("data/sample.xlsx".to_string());
-        let xml = book.xmls.get_mut("xl/worksheets/sheet1.xml").unwrap();
+        let xml = book.worksheets.get_mut("xl/worksheets/sheet1.xml").unwrap();
         let version = xml.decl.get_mut("version").unwrap();
         *version = "2.0".to_string();
         book.copy("data/sample2.xlsx");
 
         // Assert
         let mut book = Book::new("data/sample2.xlsx".to_string());
-        let xml = book.xmls.get_mut("xl/worksheets/sheet1.xml").unwrap();
+        let xml = book.worksheets.get_mut("xl/worksheets/sheet1.xml").unwrap();
         assert_eq!(xml.decl.get("version").unwrap(), "2.0");
         assert_eq!(xml.decl.get("encoding").unwrap(), "UTF-8");
         assert_eq!(xml.decl.get("standalone").unwrap(), "yes");
