@@ -106,6 +106,15 @@ impl Book {
         }
     }
 
+    pub fn sheetnames(&self) -> Vec<String> {
+        if let Some(workbook_tag) = self.workbook.elements.first() {
+            if let Some(sheets_tag) = workbook_tag.children.iter().find(|&x| x.name == *"sheet") {
+                return sheets_tag.children.iter().map(|x| x.name.clone()).collect();
+            }
+        }
+        Vec::new()
+    }
+
     // pub fn __repr__(&self) -> String {
     //     format!("<Book path='{}'>", self.path)
     // }
