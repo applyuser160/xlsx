@@ -6,7 +6,7 @@ use zip::{ZipArchive, ZipWriter};
 
 use pyo3::prelude::*;
 
-use crate::xlsx::xml::Xml;
+use crate::xlsx::xml::{Xml, XmlElement};
 
 const XML_SUFFIX: &str = ".xml";
 const XML_RELS_SUFFIX: &str = ".xml.rels";
@@ -106,13 +106,13 @@ impl Book {
         }
     }
 
+    #[getter]
     pub fn sheetnames(&self) -> Vec<String> {
-        if let Some(workbook_tag) = self.workbook.elements.first() {
-            if let Some(sheets_tag) = workbook_tag.children.iter().find(|&x| x.name == *"sheet") {
-                return sheets_tag.children.iter().map(|x| x.name.clone()).collect();
-            }
-        }
-        Vec::new()
+        self.sheet_tags().iter().map(|x| x.name.clone()).collect()
+    }
+
+    pub fn __contains__(&self, key: String) -> bool {
+        self.sheetnames().contains(&key)
     }
 
     // pub fn __repr__(&self) -> String {
@@ -206,6 +206,16 @@ impl Book {
             zip_writer.start_file(file_name, *options).unwrap();
             zip_writer.write_all(&xml.to_buf()).unwrap();
         }
+    }
+
+    /// xl/workbook.xml内のsheetタグを取得する
+    fn sheet_tags(&self) -> Vec<XmlElement> {
+        if let Some(workbook_tag) = self.workbook.elements.first() {
+            if let Some(sheets_tag) = workbook_tag.children.iter().find(|&x| x.name == *"sheet") {
+                return sheets_tag.children.clone();
+            }
+        }
+        Vec::new()
     }
 
     // pub fn get_sheet_by_name(&self, name: &String) -> Option<&Worksheet> {
