@@ -6,6 +6,7 @@ use zip::{ZipArchive, ZipWriter};
 
 use pyo3::prelude::*;
 
+use crate::xlsx::sheet::Sheet;
 use crate::xlsx::xml::{Xml, XmlElement};
 
 const XML_SUFFIX: &str = ".xml";
@@ -228,7 +229,7 @@ impl Book {
         Vec::new()
     }
 
-    // sheet一覧を取得する
+    // sheet_path一覧を取得する
     fn get_sheet_paths(&self) -> HashMap<String, String> {
         let mut result: HashMap<String, String> = HashMap::new();
         let sheet_tags: Vec<XmlElement> = self.sheet_tags();
@@ -242,10 +243,25 @@ impl Book {
                 )
             })
             .collect();
-        for sheet_tag in sheet_tags.iter() {
+        for sheet_tag in sheet_tags {
             let id: &str = sheet_tag.attributes.get("Id").unwrap().as_str();
             let sheet_path: &String = sheet_paths.get(id).unwrap();
-            result.insert(id.to_string(), sheet_path.clone());
+            result.insert(
+                sheet_tag.attributes.get("name").unwrap().clone(),
+                sheet_path.clone(),
+            );
+        }
+        result
+    }
+
+    // sheet一覧を取得する
+    fn get_sheets(&self) -> Vec<Sheet> {
+        let mut result: Vec<Sheet> = Vec::new();
+        let sheet_paths: HashMap<String, String> = self.get_sheet_paths();
+        for (_id, path) in sheet_paths {
+            let xml: Xml = self.worksheets.get(&path).unwrap().clone();
+            let sheet: Sheet = Sheet::new(path, xml);
+            result.push(sheet);
         }
         result
     }
