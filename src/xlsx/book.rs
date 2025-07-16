@@ -218,6 +218,38 @@ impl Book {
         Vec::new()
     }
 
+    // xl/workbook.xml.rels内のRelationshipタグ一覧を取得する
+    fn get_relationships(&self) -> Vec<XmlElement> {
+        if let Some(workbook_xml_rels) = self.rels.get("xl/workbook.xml.rels") {
+            if let Some(workbook_tag) = workbook_xml_rels.elements.first() {
+                return workbook_tag.children.clone();
+            }
+        }
+        Vec::new()
+    }
+
+    // sheet一覧を取得する
+    fn get_sheet_paths(&self) -> HashMap<String, String> {
+        let mut result: HashMap<String, String> = HashMap::new();
+        let sheet_tags: Vec<XmlElement> = self.sheet_tags();
+        let relationships: Vec<XmlElement> = self.get_relationships().clone();
+        let sheet_paths: HashMap<String, String> = relationships
+            .into_iter()
+            .map(|x: XmlElement| {
+                (
+                    x.attributes.get("Id").unwrap().clone(),
+                    x.attributes.get("Target").unwrap().clone(),
+                )
+            })
+            .collect();
+        for sheet_tag in sheet_tags.iter() {
+            let id: &str = sheet_tag.attributes.get("Id").unwrap().as_str();
+            let sheet_path: &String = sheet_paths.get(id).unwrap();
+            result.insert(id.to_string(), sheet_path.clone());
+        }
+        result
+    }
+
     // pub fn get_sheet_by_name(&self, name: &String) -> Option<&Worksheet> {
     //     self.value.get_sheet_by_name(name)
     // }
