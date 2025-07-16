@@ -1,6 +1,7 @@
 use std::collections::HashMap;
 use std::fs::{File, OpenOptions};
 use std::io::{Cursor, Read, Write};
+use std::sync::{Arc, Mutex};
 use zip::write::FileOptions;
 use zip::{ZipArchive, ZipWriter};
 
@@ -38,7 +39,7 @@ pub struct Book {
     pub themes: HashMap<String, Xml>,
 
     /// `xl/worksheets/`以下に存在するファイル
-    pub worksheets: HashMap<String, Xml>,
+    pub worksheets: HashMap<String, Arc<Mutex<Xml>>>,
 
     /// `xl/sharedStrings.xml`
     pub shared_strings: Xml,
@@ -61,7 +62,7 @@ impl Book {
         let mut rels: HashMap<String, Xml> = HashMap::new();
         let mut drawings: HashMap<String, Xml> = HashMap::new();
         let mut themes: HashMap<String, Xml> = HashMap::new();
-        let mut worksheets: HashMap<String, Xml> = HashMap::new();
+        let mut worksheets: HashMap<String, Arc<Mutex<Xml>>> = HashMap::new();
         let mut shared_strings: Xml = Xml::new(&String::new());
         let mut styles: Xml = Xml::new(&String::new());
         let mut workbook: Xml = Xml::new(&String::new());
@@ -80,7 +81,7 @@ impl Book {
                 } else if name.starts_with(THEME_PREFIX) {
                     themes.insert(name, xml);
                 } else if name.starts_with(WORKSHEETS_PREFIX) {
-                    worksheets.insert(name, xml);
+                    worksheets.insert(name, Arc::new(Mutex::new(xml)));
                 } else if name == WORKBOOK_FILENAME {
                     workbook = xml;
                 } else if name == STYLES_FILENAME {
@@ -180,7 +181,13 @@ impl Book {
             self.shared_strings.clone(),
         );
         xmls.extend(self.drawings.clone());
-        xmls.extend(self.worksheets.clone());
+
+        // Arc<Mutex<Xml>>からXmlを取得
+        for (key, arc_mutex_xml) in &self.worksheets {
+            let xml = arc_mutex_xml.lock().unwrap().clone();
+            xmls.insert(key.clone(), xml);
+        }
+
         xmls.extend(self.themes.clone());
         xmls
     }
@@ -259,8 +266,8 @@ impl Book {
         let mut result: Vec<Sheet> = Vec::new();
         let sheet_paths: HashMap<String, String> = self.get_sheet_paths();
         for (_id, path) in sheet_paths {
-            let xml: Xml = self.worksheets.get(&path).unwrap().clone();
-            let sheet: Sheet = Sheet::new(path, xml);
+            let arc_mutex_xml = self.worksheets.get(&path).unwrap().clone();
+            let sheet: Sheet = Sheet::new(path, arc_mutex_xml);
             result.push(sheet);
         }
         result

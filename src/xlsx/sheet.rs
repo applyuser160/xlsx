@@ -1,3 +1,5 @@
+use std::sync::{Arc, Mutex};
+
 use pyo3::prelude::*;
 
 use crate::xlsx::xml::Xml;
@@ -5,7 +7,7 @@ use crate::xlsx::xml::Xml;
 #[pyclass]
 pub struct Sheet {
     pub name: String,
-    xml: Xml,
+    xml: Arc<Mutex<Xml>>,
 }
 
 #[pymethods]
@@ -31,7 +33,7 @@ impl Sheet {
 }
 
 impl Sheet {
-    pub fn new(name: String, xml: Xml) -> Self {
+    pub fn new(name: String, xml: Arc<Mutex<Xml>>) -> Self {
         Sheet { name, xml }
     }
 

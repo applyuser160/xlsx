@@ -13,9 +13,10 @@ mod tests {
 
         // Assert
         let xml = book.worksheets.get("xl/worksheets/sheet1.xml").unwrap();
-        assert_eq!(xml.decl.get("version").unwrap(), "1.0");
-        assert_eq!(xml.decl.get("encoding").unwrap(), "UTF-8");
-        assert_eq!(xml.decl.get("standalone").unwrap(), "yes");
+        let xml_guard = xml.lock().unwrap();
+        assert_eq!(xml_guard.decl.get("version").unwrap(), "1.0");
+        assert_eq!(xml_guard.decl.get("encoding").unwrap(), "UTF-8");
+        assert_eq!(xml_guard.decl.get("standalone").unwrap(), "yes");
     }
 
     #[test]
@@ -31,18 +32,21 @@ mod tests {
         assert!(!Path::new("data/sample2.xlsx").exists());
 
         // Act
-        let mut book = Book::new("data/sample.xlsx".to_string());
-        let xml = book.worksheets.get_mut("xl/worksheets/sheet1.xml").unwrap();
-        let version = xml.decl.get_mut("version").unwrap();
+        let book = Book::new("data/sample.xlsx".to_string());
+        let xml = book.worksheets.get("xl/worksheets/sheet1.xml").unwrap();
+        let mut xml_guard = xml.lock().unwrap();
+        let version = xml_guard.decl.get_mut("version").unwrap();
         *version = "1.0".to_string();
+        drop(xml_guard); // ロックを解放
         book.save();
 
         // Assert
-        let mut book = Book::new("data/sample.xlsx".to_string());
-        let xml = book.worksheets.get_mut("xl/worksheets/sheet1.xml").unwrap();
-        assert_eq!(xml.decl.get("version").unwrap(), "1.0");
-        assert_eq!(xml.decl.get("encoding").unwrap(), "UTF-8");
-        assert_eq!(xml.decl.get("standalone").unwrap(), "yes");
+        let book = Book::new("data/sample.xlsx".to_string());
+        let xml = book.worksheets.get("xl/worksheets/sheet1.xml").unwrap();
+        let xml_guard = xml.lock().unwrap();
+        assert_eq!(xml_guard.decl.get("version").unwrap(), "1.0");
+        assert_eq!(xml_guard.decl.get("encoding").unwrap(), "UTF-8");
+        assert_eq!(xml_guard.decl.get("standalone").unwrap(), "yes");
     }
 
     #[test]
@@ -58,17 +62,20 @@ mod tests {
         assert!(!Path::new("data/sample2.xlsx").exists());
 
         // Act
-        let mut book = Book::new("data/sample.xlsx".to_string());
-        let xml = book.worksheets.get_mut("xl/worksheets/sheet1.xml").unwrap();
-        let version = xml.decl.get_mut("version").unwrap();
+        let book = Book::new("data/sample.xlsx".to_string());
+        let xml = book.worksheets.get("xl/worksheets/sheet1.xml").unwrap();
+        let mut xml_guard = xml.lock().unwrap();
+        let version = xml_guard.decl.get_mut("version").unwrap();
         *version = "2.0".to_string();
+        drop(xml_guard); // ロックを解放
         book.copy("data/sample2.xlsx");
 
         // Assert
-        let mut book = Book::new("data/sample2.xlsx".to_string());
-        let xml = book.worksheets.get_mut("xl/worksheets/sheet1.xml").unwrap();
-        assert_eq!(xml.decl.get("version").unwrap(), "2.0");
-        assert_eq!(xml.decl.get("encoding").unwrap(), "UTF-8");
-        assert_eq!(xml.decl.get("standalone").unwrap(), "yes");
+        let book = Book::new("data/sample2.xlsx".to_string());
+        let xml = book.worksheets.get("xl/worksheets/sheet1.xml").unwrap();
+        let xml_guard = xml.lock().unwrap();
+        assert_eq!(xml_guard.decl.get("version").unwrap(), "2.0");
+        assert_eq!(xml_guard.decl.get("encoding").unwrap(), "UTF-8");
+        assert_eq!(xml_guard.decl.get("standalone").unwrap(), "yes");
     }
 }
