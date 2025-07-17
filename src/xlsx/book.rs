@@ -119,21 +119,21 @@ impl Book {
 
     pub fn create_sheet(&mut self, title: String, index: usize) -> Sheet {
         // 次のシートIDとrIdを取得
-        let sheet_tags = self.sheet_tags();
-        let next_sheet_id = sheet_tags.len() + 1;
-        let next_rid = format!("rId{}", self.get_relationships().len() + 1);
+        let sheet_tags: Vec<XmlElement> = self.sheet_tags();
+        let next_sheet_id: usize = sheet_tags.len() + 1;
+        let next_rid: String = format!("rId{}", self.get_relationships().len() + 1);
 
         // シートパスを作成
-        let sheet_path = format!("xl/worksheets/sheet{}.xml", next_sheet_id);
+        let sheet_path: String = format!("xl/worksheets/sheet{}.xml", next_sheet_id);
 
         // 空のワークシートXMLを作成
-        let worksheet_xml = Xml::new(&r#"<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
+        let worksheet_xml: Xml = Xml::new(&r#"<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
 <worksheet xmlns="http://schemas.openxmlformats.org/spreadsheetml/2006/main" xmlns:r="http://schemas.openxmlformats.org/officeDocument/2006/relationships">
   <sheetData/>
 </worksheet>"#.to_string());
 
         // ワークシートをコレクションに追加
-        let arc_mutex_xml = Arc::new(Mutex::new(worksheet_xml));
+        let arc_mutex_xml: Arc<Mutex<Xml>> = Arc::new(Mutex::new(worksheet_xml));
         self.worksheets
             .insert(sheet_path.clone(), arc_mutex_xml.clone());
 
@@ -145,7 +145,7 @@ impl Book {
                 .find(|x| x.name == "sheets")
             {
                 // 新しいシート要素を作成
-                let mut sheet_element = XmlElement {
+                let mut sheet_element: XmlElement = XmlElement {
                     name: "sheet".to_string(),
                     attributes: HashMap::new(),
                     children: Vec::new(),
@@ -176,7 +176,7 @@ impl Book {
         if let Some(workbook_rels) = self.rels.get_mut("xl/_rels/workbook.xml.rels") {
             if let Some(relationships_tag) = workbook_rels.elements.first_mut() {
                 // 新しい関係要素を作成
-                let mut relationship_element = XmlElement {
+                let mut relationship_element: XmlElement = XmlElement {
                     name: "Relationship".to_string(),
                     attributes: HashMap::new(),
                     children: Vec::new(),
@@ -261,7 +261,7 @@ impl Book {
 
         // Arc<Mutex<Xml>>からXmlを取得
         for (key, arc_mutex_xml) in &self.worksheets {
-            let xml = arc_mutex_xml.lock().unwrap().clone();
+            let xml: Xml = arc_mutex_xml.lock().unwrap().clone();
             xmls.insert(key.clone(), xml);
         }
 
@@ -279,7 +279,7 @@ impl Book {
         let file_names: Vec<String> = archive.file_names().map(|s| s.to_string()).collect();
         for filename in file_names {
             if !xmls.contains_key(&filename) {
-                let mut file = archive.by_name(&filename).unwrap();
+                let mut file: zip::read::ZipFile<'_> = archive.by_name(&filename).unwrap();
                 let mut contents: Vec<u8> = Vec::new();
                 file.read_to_end(&mut contents).unwrap();
                 zip_writer.start_file(&filename, *options).unwrap();
