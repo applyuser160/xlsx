@@ -117,17 +117,94 @@ impl Book {
         self.sheetnames().contains(&key)
     }
 
-    // pub fn __repr__(&self) -> String {
-    //     format!("<Book path='{}'>", self.path)
-    // }
+    pub fn create_sheet(&mut self, title: String, index: usize) -> Sheet {
+        // 次のシートIDとrIdを取得
+        let sheet_tags = self.sheet_tags();
+        let next_sheet_id = sheet_tags.len() + 1;
+        let next_rid = format!("rId{}", self.get_relationships().len() + 1);
 
-    // pub fn get_value(&self, sheet: String, address: String) -> String {
-    //     let worksheet = self.get_sheet_by_name(&sheet);
-    //     return match worksheet {
-    //         Some(ws) => ws.get_value(address),
-    //         None => "Sheet not found".to_string(),
-    //     };
-    // }
+        // シートパスを作成
+        let sheet_path = format!("xl/worksheets/sheet{}.xml", next_sheet_id);
+
+        // 空のワークシートXMLを作成
+        let worksheet_xml = Xml::new(&r#"<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
+<worksheet xmlns="http://schemas.openxmlformats.org/spreadsheetml/2006/main" xmlns:r="http://schemas.openxmlformats.org/officeDocument/2006/relationships">
+  <sheetData/>
+</worksheet>"#.to_string());
+
+        // ワークシートをコレクションに追加
+        let arc_mutex_xml = Arc::new(Mutex::new(worksheet_xml));
+        self.worksheets
+            .insert(sheet_path.clone(), arc_mutex_xml.clone());
+
+        // workbook.xmlを更新して新しいシートを含める
+        if let Some(workbook_tag) = self.workbook.elements.first_mut() {
+            if let Some(sheets_tag) = workbook_tag
+                .children
+                .iter_mut()
+                .find(|x| x.name == "sheets")
+            {
+                // 新しいシート要素を作成
+                let mut sheet_element = XmlElement {
+                    name: "sheet".to_string(),
+                    attributes: HashMap::new(),
+                    children: Vec::new(),
+                    text: None,
+                };
+
+                // 属性を追加
+                sheet_element
+                    .attributes
+                    .insert("name".to_string(), title.clone());
+                sheet_element
+                    .attributes
+                    .insert("sheetId".to_string(), next_sheet_id.to_string());
+                sheet_element
+                    .attributes
+                    .insert("r:id".to_string(), next_rid.clone());
+
+                // 指定されたインデックスに挿入、またはリストの最後に追加
+                if index < sheets_tag.children.len() {
+                    sheets_tag.children.insert(index, sheet_element);
+                } else {
+                    sheets_tag.children.push(sheet_element);
+                }
+            }
+        }
+
+        // workbook.xml.relsを更新して関係を含める
+        if let Some(workbook_rels) = self.rels.get_mut("xl/_rels/workbook.xml.rels") {
+            if let Some(relationships_tag) = workbook_rels.elements.first_mut() {
+                // 新しい関係要素を作成
+                let mut relationship_element = XmlElement {
+                    name: "Relationship".to_string(),
+                    attributes: HashMap::new(),
+                    children: Vec::new(),
+                    text: None,
+                };
+
+                // 属性を追加
+                relationship_element
+                    .attributes
+                    .insert("Id".to_string(), next_rid);
+                relationship_element.attributes.insert(
+                    "Type".to_string(),
+                    "http://schemas.openxmlformats.org/officeDocument/2006/relationships/worksheet"
+                        .to_string(),
+                );
+                relationship_element.attributes.insert(
+                    "Target".to_string(),
+                    format!("worksheets/sheet{}.xml", next_sheet_id),
+                );
+
+                // 関係を追加
+                relationships_tag.children.push(relationship_element);
+            }
+        }
+
+        // Sheetオブジェクトを作成して返す
+        Sheet::new(title, arc_mutex_xml)
+    }
 }
 
 impl Book {
@@ -219,7 +296,7 @@ impl Book {
     /// xl/workbook.xml内のsheetタグを取得する
     fn sheet_tags(&self) -> Vec<XmlElement> {
         if let Some(workbook_tag) = self.workbook.elements.first() {
-            if let Some(sheets_tag) = workbook_tag.children.iter().find(|&x| x.name == *"sheet") {
+            if let Some(sheets_tag) = workbook_tag.children.iter().find(|&x| x.name == *"sheets") {
                 return sheets_tag.children.clone();
             }
         }
@@ -228,7 +305,7 @@ impl Book {
 
     // xl/workbook.xml.rels内のRelationshipタグ一覧を取得する
     fn get_relationships(&self) -> Vec<XmlElement> {
-        if let Some(workbook_xml_rels) = self.rels.get("xl/workbook.xml.rels") {
+        if let Some(workbook_xml_rels) = self.rels.get("xl/_rels/workbook.xml.rels") {
             if let Some(workbook_tag) = workbook_xml_rels.elements.first() {
                 return workbook_tag.children.clone();
             }
@@ -251,39 +328,24 @@ impl Book {
             })
             .collect();
         for sheet_tag in sheet_tags {
-            let id: &str = sheet_tag.attributes.get("Id").unwrap().as_str();
+            let id: &str = sheet_tag.attributes.get("r:id").unwrap().as_str();
             let sheet_path: &String = sheet_paths.get(id).unwrap();
             result.insert(
                 sheet_tag.attributes.get("name").unwrap().clone(),
-                sheet_path.clone(),
+                format!("xl/{}", sheet_path),
             );
         }
         result
     }
 
-    // sheet一覧を取得する
-    fn get_sheets(&self) -> Vec<Sheet> {
-        let mut result: Vec<Sheet> = Vec::new();
+    // シート名からシートを取得する
+    pub fn get_sheet_by_name(&self, name: &str) -> Option<Sheet> {
         let sheet_paths: HashMap<String, String> = self.get_sheet_paths();
-        for (_id, path) in sheet_paths {
-            let arc_mutex_xml = self.worksheets.get(&path).unwrap().clone();
-            let sheet: Sheet = Sheet::new(path, arc_mutex_xml);
-            result.push(sheet);
+        if let Some(sheet_path) = sheet_paths.get(name) {
+            if let Some(xml) = self.worksheets.get(sheet_path) {
+                return Some(Sheet::new(name.to_string(), xml.clone()));
+            }
         }
-        result
-    }
-
-    // pub fn get_sheet_by_name(&self, name: &String) -> Option<&Worksheet> {
-    //     self.value.get_sheet_by_name(name)
-    // }
-
-    // pub fn get_sheet_by_index(&self, index: &usize) -> Option<&Worksheet> {
-    //     self.value.get_sheet(index)
-    // }
-}
-
-impl Drop for Book {
-    fn drop(&mut self) {
-        self.save();
+        None
     }
 }
