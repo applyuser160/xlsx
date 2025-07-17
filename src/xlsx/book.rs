@@ -127,10 +127,14 @@ impl Book {
         let sheet_path: String = format!("xl/worksheets/sheet{}.xml", next_sheet_id);
 
         // 空のワークシートXMLを作成
-        let worksheet_xml: Xml = Xml::new(&r#"<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
-<worksheet xmlns="http://schemas.openxmlformats.org/spreadsheetml/2006/main" xmlns:r="http://schemas.openxmlformats.org/officeDocument/2006/relationships">
-  <sheetData/>
-</worksheet>"#.to_string());
+        let worksheet_xml: Xml = Xml::new(
+            &r#"<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
+            <worksheet xmlns="http://schemas.openxmlformats.org/spreadsheetml/2006/main"
+            xmlns:r="http://schemas.openxmlformats.org/officeDocument/2006/relationships">
+                <sheetData/>
+            </worksheet>"#
+                .to_string(),
+        );
 
         // ワークシートをコレクションに追加
         let arc_mutex_xml: Arc<Mutex<Xml>> = Arc::new(Mutex::new(worksheet_xml));
