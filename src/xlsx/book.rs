@@ -110,7 +110,10 @@ impl Book {
 
     #[getter]
     pub fn sheetnames(&self) -> Vec<String> {
-        self.sheet_tags().iter().map(|x| x.name.clone()).collect()
+        self.sheet_tags()
+            .iter()
+            .map(|x| x.attributes.get("name").unwrap().clone())
+            .collect()
     }
 
     pub fn __contains__(&self, key: String) -> bool {
@@ -253,7 +256,7 @@ impl Book {
     }
 
     /// 構造体内のxmlを集合
-    fn merge_xmls(&self) -> HashMap<String, Xml> {
+    pub fn merge_xmls(&self) -> HashMap<String, Xml> {
         let mut xmls: HashMap<String, Xml> = self.rels.clone();
         xmls.insert(WORKBOOK_FILENAME.to_string(), self.workbook.clone());
         xmls.insert(STYLES_FILENAME.to_string(), self.styles.clone());
@@ -274,7 +277,7 @@ impl Book {
     }
 
     /// ファイルへの書き込み
-    fn write_file<W: Write + std::io::Seek>(
+    pub fn write_file<W: Write + std::io::Seek>(
         archive: &mut ZipArchive<File>,
         xmls: &HashMap<String, Xml>,
         zip_writer: &mut ZipWriter<W>,
@@ -298,7 +301,7 @@ impl Book {
     }
 
     /// xl/workbook.xml内のsheetタグを取得する
-    fn sheet_tags(&self) -> Vec<XmlElement> {
+    pub fn sheet_tags(&self) -> Vec<XmlElement> {
         if let Some(workbook_tag) = self.workbook.elements.first() {
             if let Some(sheets_tag) = workbook_tag.children.iter().find(|&x| x.name == *"sheets") {
                 return sheets_tag.children.clone();
@@ -308,7 +311,7 @@ impl Book {
     }
 
     // xl/workbook.xml.rels内のRelationshipタグ一覧を取得する
-    fn get_relationships(&self) -> Vec<XmlElement> {
+    pub fn get_relationships(&self) -> Vec<XmlElement> {
         if let Some(workbook_xml_rels) = self.rels.get("xl/_rels/workbook.xml.rels") {
             if let Some(workbook_tag) = workbook_xml_rels.elements.first() {
                 return workbook_tag.children.clone();
@@ -318,7 +321,7 @@ impl Book {
     }
 
     // sheet_path一覧を取得する
-    fn get_sheet_paths(&self) -> HashMap<String, String> {
+    pub fn get_sheet_paths(&self) -> HashMap<String, String> {
         let mut result: HashMap<String, String> = HashMap::new();
         let sheet_tags: Vec<XmlElement> = self.sheet_tags();
         let relationships: Vec<XmlElement> = self.get_relationships().clone();
