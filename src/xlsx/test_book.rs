@@ -71,7 +71,7 @@ mod tests {
         book.copy("./data/sample2.xlsx");
 
         // Assert
-        let book = Book::new("data/sample2.xlsx".to_string());
+        let book = Book::new("./data/sample2.xlsx".to_string());
         let xml = book.worksheets.get("xl/worksheets/sheet1.xml").unwrap();
         let xml_guard = xml.lock().unwrap();
         assert_eq!(xml_guard.decl.get("version").unwrap(), "2.0");
