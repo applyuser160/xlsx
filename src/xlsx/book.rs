@@ -56,7 +56,11 @@ impl Book {
     #[new]
     #[pyo3(signature = (path=INIT_EXCEL_FILENAME.to_string()))]
     pub fn new(path: String) -> Self {
-        let file = File::open(&path).unwrap();
+        let file_result: Result<File, std::io::Error> = File::open(&path);
+        if file_result.is_err() {
+            panic!("File not found: {}", path);
+        }
+        let file = file_result.unwrap();
         let mut archive: ZipArchive<File> = ZipArchive::new(file).unwrap();
 
         let mut rels: HashMap<String, Xml> = HashMap::new();
