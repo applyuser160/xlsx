@@ -120,8 +120,44 @@ impl Book {
             .collect()
     }
 
+    pub fn __iter__(&self) -> Vec<String> {
+        self.sheetnames()
+    }
+
     pub fn __contains__(&self, key: String) -> bool {
         self.sheetnames().contains(&key)
+    }
+
+    pub fn __getitem__(&self, key: String) -> Sheet {
+        if let Some(sheet) = self.get_sheet_by_name(key.as_str()) {
+            return sheet;
+        }
+        panic!("No sheet named '{}'", key);
+    }
+
+    pub fn __delitem__(&mut self, key: String) {
+        if let Some(sheet) = self.get_sheet_by_name(key.as_str()) {
+            self.remove(&sheet);
+            return;
+        }
+        panic!("No sheet named '{}'", key);
+    }
+
+    pub fn index(&self, sheet: &Sheet) -> usize {
+        let sheet_name = &sheet.name;
+        let sheet_names = self.sheetnames();
+        if let Some(sheet_index) = sheet_names.iter().position(|x| x == sheet_name) {
+            return sheet_index;
+        }
+        panic!("No sheet named '{}'", sheet_name);
+    }
+
+    pub fn remove(&mut self, sheet: &Sheet) {
+        if self.worksheets.contains_key(&sheet.name) {
+            self.worksheets.remove(&sheet.name);
+            return;
+        }
+        panic!("No sheet named '{}'", sheet.name)
     }
 
     pub fn create_sheet(&mut self, title: String, index: usize) -> Sheet {
