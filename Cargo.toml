@@ -15,6 +15,3 @@ umya-spreadsheet = "2.3.0"
 quick-xml = "0.38"
 serde = { version = "1.0", features = ["derive"] }
 zip = "0.6"
-
-[build-dependencies]
-pyo3-build-config = "0.25.0"

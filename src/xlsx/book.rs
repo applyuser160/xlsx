@@ -29,6 +29,9 @@ pub struct Book {
     #[pyo3(get, set)]
     pub path: String,
 
+    #[pyo3(get, set)]
+    pub active_sheet_index: usize,
+
     /// `xl/_rels/`以下に存在するファイル
     pub rels: HashMap<String, Xml>,
 
@@ -49,6 +52,9 @@ pub struct Book {
 
     /// `workbook.xml`
     pub workbook: Xml,
+
+    /// `definedNames`
+    pub defined_names: Vec<XmlElement>,
 }
 
 #[pymethods]
@@ -100,8 +106,27 @@ impl Book {
             }
         }
 
+        let mut active_sheet_index = 0;
+        if let Some(workbook_tag) = workbook.elements.first() {
+            if let Some(book_views) = workbook_tag.children.iter().find(|c| c.name == "bookViews") {
+                if let Some(workbook_view) = book_views.children.iter().find(|c| c.name == "workbookView") {
+                    if let Some(active_tab) = workbook_view.attributes.get("activeTab") {
+                        active_sheet_index = active_tab.parse().unwrap_or(0);
+                    }
+                }
+            }
+        }
+
+        let mut defined_names = Vec::new();
+        if let Some(workbook_tag) = workbook.elements.first() {
+            if let Some(defined_names_tag) = workbook_tag.children.iter().find(|c| c.name == "definedNames") {
+                defined_names = defined_names_tag.children.clone();
+            }
+        }
+
         Book {
             path,
+            active_sheet_index,
             rels,
             drawings,
             themes,
@@ -109,6 +134,7 @@ impl Book {
             shared_strings,
             styles,
             workbook,
+            defined_names,
         }
     }
 
@@ -133,6 +159,64 @@ impl Book {
             return sheet;
         }
         panic!("No sheet named '{key}'");
+    }
+
+    #[getter]
+    pub fn active(&self) -> PyResult<Sheet> {
+        let sheet_name = self.sheetnames().get(self.active_sheet_index).cloned();
+        match sheet_name {
+            Some(name) => Ok(self.__getitem__(name)),
+            None => Err(pyo3::exceptions::PyValueError::new_err("No active sheet found")),
+        }
+    }
+
+    #[setter(active)]
+    pub fn set_active(&mut self, value: PyObject) -> PyResult<()> {
+        Python::with_gil(|py| {
+            let any = value.bind(py);
+            if let Ok(sheet) = any.extract() {
+                self.active_sheet_index = self.index(&sheet);
+            } else if let Ok(index) = any.extract() {
+                if index >= self.sheetnames().len() {
+                    return Err(pyo3::exceptions::PyValueError::new_err("Sheet index out of range"));
+                }
+                self.active_sheet_index = index;
+            } else {
+                return Err(pyo3::exceptions::PyTypeError::new_err("Invalid type for active sheet"));
+            }
+            self.update_active_tab();
+            Ok(())
+        })
+    }
+
+    #[pyo3(signature = (name, range, local_sheet_id=None))]
+    pub fn create_named_range(&mut self, name: String, range: String, local_sheet_id: Option<usize>) {
+        let mut attributes = HashMap::new();
+        attributes.insert("name".to_string(), name);
+        if let Some(id) = local_sheet_id {
+            attributes.insert("localSheetId".to_string(), id.to_string());
+        }
+        let new_defined_name = XmlElement {
+            name: "definedName".to_string(),
+            attributes,
+            children: Vec::new(),
+            text: Some(range),
+        };
+        self.defined_names.push(new_defined_name);
+        self.update_defined_names();
+    }
+
+    pub fn delete_named_range(&mut self, name: String) {
+        self.defined_names.retain(|dn| dn.attributes.get("name") != Some(&name));
+        self.update_defined_names();
+    }
+
+    #[getter]
+    pub fn defined_names(&self) -> Vec<String> {
+        self.defined_names
+            .iter()
+            .map(|dn| dn.attributes.get("name").unwrap().clone())
+            .collect()
     }
 
     pub fn __delitem__(&mut self, key: String) {
@@ -317,6 +401,63 @@ impl Book {
 }
 
 impl Book {
+    pub(crate) fn update_active_tab(&mut self) {
+        let workbook_tag = self.workbook.elements.first_mut().unwrap();
+
+        let book_views = match workbook_tag.children.iter_mut().find(|c| c.name == "bookViews") {
+            Some(bv) => bv,
+            None => {
+                let new_book_views = XmlElement {
+                    name: "bookViews".to_string(),
+                    attributes: HashMap::new(),
+                    children: vec![XmlElement {
+                        name: "workbookView".to_string(),
+                        attributes: HashMap::new(),
+                        children: Vec::new(),
+                        text: None,
+                    }],
+                    text: None,
+                };
+                workbook_tag.children.push(new_book_views);
+                workbook_tag.children.iter_mut().find(|c| c.name == "bookViews").unwrap()
+            }
+        };
+
+        let workbook_view = match book_views.children.iter_mut().find(|c| c.name == "workbookView") {
+            Some(wv) => wv,
+            None => {
+                let new_workbook_view = XmlElement {
+                    name: "workbookView".to_string(),
+                    attributes: HashMap::new(),
+                    children: Vec::new(),
+                    text: None,
+                };
+                book_views.children.push(new_workbook_view);
+                book_views.children.iter_mut().find(|c| c.name == "workbookView").unwrap()
+            }
+        };
+
+        workbook_view.attributes.insert("activeTab".to_string(), self.active_sheet_index.to_string());
+    }
+
+    fn update_defined_names(&mut self) {
+        let workbook_tag = self.workbook.elements.first_mut().unwrap();
+        let defined_names_tag = match workbook_tag.children.iter_mut().find(|c| c.name == "definedNames") {
+            Some(dnt) => dnt,
+            None => {
+                let new_defined_names_tag = XmlElement {
+                    name: "definedNames".to_string(),
+                    attributes: HashMap::new(),
+                    children: Vec::new(),
+                    text: None,
+                };
+                workbook_tag.children.push(new_defined_names_tag);
+                workbook_tag.children.iter_mut().find(|c| c.name == "definedNames").unwrap()
+            }
+        };
+        defined_names_tag.children = self.defined_names.clone();
+    }
+
     pub fn save(&self) {
         let file: File = File::open(&self.path).unwrap();
         let mut archive: ZipArchive<File> = ZipArchive::new(file).unwrap();
