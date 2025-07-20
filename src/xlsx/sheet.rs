@@ -43,7 +43,7 @@ impl Sheet {
             col_str.insert(0, (b'A' + remainder as u8) as char);
             col_num = (col_num - 1) / 26;
         }
-        format!("{col_str}{row}")
+        format!("{}{}", col_str, row)
     }
 
     pub fn new(name: String, xml: Arc<Mutex<Xml>>, shared_strings: Arc<Mutex<Xml>>) -> Self {

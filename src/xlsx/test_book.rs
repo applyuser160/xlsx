@@ -32,7 +32,6 @@ mod tests {
         assert_eq!(xml_guard.decl.get("standalone").unwrap(), "yes");
     }
 
-
     #[test]
     fn test_copy_book() {
         // 観点: Excelファイルの名前をつけて保存
@@ -49,7 +48,10 @@ mod tests {
 
         // Assert
         let book_copied = Book::new(copy_path.clone());
-        let xml_copied = book_copied.worksheets.get("xl/worksheets/sheet1.xml").unwrap();
+        let xml_copied = book_copied
+            .worksheets
+            .get("xl/worksheets/sheet1.xml")
+            .unwrap();
         let xml_guard_copied = xml_copied.lock().unwrap();
         assert_eq!(xml_guard_copied.decl.get("version").unwrap(), "2.0");
 

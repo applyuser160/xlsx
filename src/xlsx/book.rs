@@ -160,8 +160,10 @@ impl Book {
 
                 // workbook.xmlからsheetタグを削除
                 if let Some(workbook_tag) = self.workbook.elements.first_mut() {
-                    if let Some(sheets_tag) =
-                        workbook_tag.children.iter_mut().find(|x| x.name == "sheets")
+                    if let Some(sheets_tag) = workbook_tag
+                        .children
+                        .iter_mut()
+                        .find(|x| x.name == "sheets")
                     {
                         sheets_tag
                             .children
@@ -396,7 +398,7 @@ impl Book {
                 .trim_start_matches("xl/");
             result.insert(
                 sheet_tag.attributes.get("name").unwrap().clone(),
-                format!("xl/{trimmed_path}"),
+                format!("xl/{}", trimmed_path),
             );
         }
         result
