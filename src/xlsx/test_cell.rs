@@ -6,16 +6,12 @@ mod tests {
     fn setup_book(test_name: &str) -> Book {
         // テスト用のExcelファイルをコピーして使用
         let original_path = "data/sample.xlsx";
-        let test_path = format!("data/test_cell_{}.xlsx", test_name);
+        let test_path = format!("data/test_cell_{test_name}.xlsx");
         if std::path::Path::new(&test_path).exists() {
             let _ = fs::remove_file(&test_path);
         }
         fs::copy(original_path, &test_path).unwrap();
         Book::new(test_path)
-    }
-
-    fn cleanup(book: Book) {
-        let _ = fs::remove_file(book.path);
     }
 
     #[test]
@@ -29,7 +25,7 @@ mod tests {
 
         // Assert
         assert_eq!(cell.value().unwrap(), "1.0");
-        cleanup(book);
+        let _ = fs::remove_file(&book.path);
     }
 
     #[test]
@@ -43,7 +39,7 @@ mod tests {
 
         // Assert
         assert!(cell.value().is_none());
-        cleanup(book);
+        let _ = fs::remove_file(&book.path);
     }
 
     #[test]
@@ -64,7 +60,7 @@ mod tests {
         let cell_reloaded = sheet_reloaded.__getitem__("A1");
         assert_eq!(cell_reloaded.value().unwrap(), "999");
 
-        cleanup(book);
+        let _ = fs::remove_file(&book.path);
         let _ = fs::remove_file(copy_path);
     }
 

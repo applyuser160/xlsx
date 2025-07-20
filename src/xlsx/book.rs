@@ -158,16 +158,37 @@ impl Book {
             if self.worksheets.contains_key(sheet_path) {
                 self.worksheets.remove(sheet_path);
 
-                // workbook.xmlからsheetタグを削除
+                // workbook.xmlからsheetタグを削除し、r:idを取得
+                let mut rid_to_remove = String::new();
                 if let Some(workbook_tag) = self.workbook.elements.first_mut() {
                     if let Some(sheets_tag) = workbook_tag
                         .children
                         .iter_mut()
                         .find(|x| x.name == "sheets")
                     {
+                        if let Some(sheet_element) = sheets_tag
+                            .children
+                            .iter()
+                            .find(|s| s.attributes.get("name") == Some(&sheet.name))
+                        {
+                            if let Some(rid) = sheet_element.attributes.get("r:id") {
+                                rid_to_remove = rid.clone();
+                            }
+                        }
                         sheets_tag
                             .children
                             .retain(|s| s.attributes.get("name") != Some(&sheet.name));
+                    }
+                }
+
+                // workbook.xml.relsからRelationshipタグを削除
+                if !rid_to_remove.is_empty() {
+                    if let Some(workbook_rels) = self.rels.get_mut("xl/_rels/workbook.xml.rels") {
+                        if let Some(relationships_tag) = workbook_rels.elements.first_mut() {
+                            relationships_tag
+                                .children
+                                .retain(|r| r.attributes.get("Id") != Some(&rid_to_remove));
+                        }
                     }
                 }
                 return;
@@ -398,7 +419,7 @@ impl Book {
                 .trim_start_matches("xl/");
             result.insert(
                 sheet_tag.attributes.get("name").unwrap().clone(),
-                format!("xl/{}", trimmed_path),
+                format!("xl/{trimmed_path}"),
             );
         }
         result
