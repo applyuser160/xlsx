@@ -13,9 +13,15 @@ mod tests {
         Book::new(test_path)
     }
 
+    fn cleanup(book: Book) {
+        let _ = fs::remove_file(book.path);
+    }
+
     #[test]
     fn test_new_book() {
         // 観点: Excelファイルの読み取り
+
+        // Act
         let book = Book::new("data/sample.xlsx".to_string());
 
         // Assert
@@ -49,13 +55,15 @@ mod tests {
         let xml_guard_copied = xml_copied.lock().unwrap();
         assert_eq!(xml_guard_copied.decl.get("version").unwrap(), "2.0");
 
-        let _ = fs::remove_file(&book.path);
+        cleanup(book);
         let _ = fs::remove_file(copy_path);
     }
 
     #[test]
     fn test_sheetnames() {
         // 観点: シート名一覧の取得
+
+        // Act
         let book = Book::new("data/sample.xlsx".to_string());
         let sheetnames = book.sheetnames();
 
@@ -67,6 +75,8 @@ mod tests {
     #[test]
     fn test_contains__() {
         // 観点: シート名の存在確認
+
+        // Act
         let book = Book::new("data/sample.xlsx".to_string());
 
         // Assert
@@ -77,6 +87,8 @@ mod tests {
     #[test]
     fn test_create_sheet() {
         // 観点: 新規シートの作成
+
+        // Arrange
         let mut book = setup_book("create_sheet");
         let sheet_count_before = book.sheetnames().len();
 
@@ -87,12 +99,14 @@ mod tests {
         assert_eq!(sheet.name, "TestSheet");
         assert_eq!(book.sheetnames().len(), sheet_count_before + 1);
         assert!(book.__contains__("TestSheet".to_string()));
-        let _ = fs::remove_file(&book.path);
+        cleanup(book);
     }
 
     #[test]
     fn test_merge_xmls() {
         // 観点: XMLの結合
+
+        // Act
         let book = Book::new("data/sample.xlsx".to_string());
         let xmls = book.merge_xmls();
 
@@ -119,13 +133,15 @@ mod tests {
         // Assert
         assert!(Path::new(&copy_path).exists());
 
-        let _ = fs::remove_file(&book.path);
+        cleanup(book);
         let _ = fs::remove_file(copy_path);
     }
 
     #[test]
     fn test_sheet_tags() {
         // 観点: シートタグの取得
+
+        // Act
         let book = Book::new("data/sample.xlsx".to_string());
         let sheet_tags = book.sheet_tags();
 
@@ -142,6 +158,8 @@ mod tests {
     #[test]
     fn test_relationships() {
         // 観点: リレーションシップの取得
+
+        // Act
         let book = Book::new("data/sample.xlsx".to_string());
         let relationships = book.get_relationships();
 
@@ -158,6 +176,8 @@ mod tests {
     #[test]
     fn test_sheet_paths() {
         // 観点: シートパスの取得
+
+        // Act
         let book = Book::new("data/sample.xlsx".to_string());
         let sheet_paths = book.get_sheet_paths();
 
@@ -189,7 +209,7 @@ mod tests {
         assert_eq!(book.sheetnames().len(), sheet_count_before - 1);
         assert!(!book.__contains__("シート1".to_string()));
 
-        let _ = fs::remove_file(&book.path);
+        cleanup(book);
     }
 
     #[test]
@@ -204,7 +224,7 @@ mod tests {
         // Assert
         assert_eq!(index, 0);
 
-        let _ = fs::remove_file(&book.path);
+        cleanup(book);
     }
 
     #[test]
@@ -222,6 +242,6 @@ mod tests {
         assert_eq!(sheetnames[1], "シート1");
         assert_eq!(new_sheet.name, "NewSheetAt0");
 
-        let _ = fs::remove_file(&book.path);
+        cleanup(book);
     }
 }
