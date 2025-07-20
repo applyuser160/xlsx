@@ -43,9 +43,9 @@ mod tests {
     }
 
     #[test]
-    fn test_set_numeric_value() {
-        // 観点: 数値セルの値を書き換えることができるか
-        let book = setup_book("set_numeric");
+    fn test_set_numeric_value_existing_cell() {
+        // 観点: 既存の数値セルの値を書き換えることができるか
+        let book = setup_book("set_numeric_existing");
         let sheet = book.__getitem__("シート1".to_string());
         let copy_path = format!("{}.copy.xlsx", book.path);
 
@@ -64,6 +64,54 @@ mod tests {
         let _ = fs::remove_file(copy_path);
     }
 
-    // TODO: `inlineStr`と`sharedStrings`のテストを追加
-    // これには、それらの形式を持つテスト用のxlsxファイルが必要
+    #[test]
+    fn test_set_string_value_existing_cell() {
+        // 観点: 既存の文字列セルの値を書き換えることができるか
+        let book = setup_book("set_string_existing");
+        let sheet = book.__getitem__("シート1".to_string());
+        let copy_path = format!("{}.copy.xlsx", book.path);
+
+        // Act
+        let mut cell = sheet.__getitem__("B1");
+        cell.set_value("new_string".to_string());
+        book.copy(&copy_path);
+
+        // Assert
+        let book_reloaded = Book::new(copy_path.clone());
+        let sheet_reloaded = book_reloaded.__getitem__("シート1".to_string());
+        let cell_reloaded = sheet_reloaded.__getitem__("B1");
+        assert_eq!(cell_reloaded.value().unwrap(), "new_string");
+
+        let _ = fs::remove_file(&book.path);
+        let _ = fs::remove_file(copy_path);
+    }
+
+    #[test]
+    fn test_set_value_new_cell() {
+        // 観点: 新しいセルに値を書き込めるか
+        let book = setup_book("set_new_cell");
+        let sheet = book.__getitem__("シート1".to_string());
+        let copy_path = format!("{}.copy.xlsx", book.path);
+
+        // Act
+        let mut cell_c1 = sheet.__getitem__("C1");
+        cell_c1.set_value("12345".to_string());
+        let mut cell_d1 = sheet.__getitem__("D1");
+        cell_d1.set_value("new_cell_string".to_string());
+        book.copy(&copy_path);
+
+        // Assert
+        let book_reloaded = Book::new(copy_path.clone());
+        let sheet_reloaded = book_reloaded.__getitem__("シート1".to_string());
+        let cell_c1_reloaded = sheet_reloaded.__getitem__("C1");
+        let cell_d1_reloaded = sheet_reloaded.__getitem__("D1");
+        assert_eq!(cell_c1_reloaded.value().unwrap(), "12345");
+        assert_eq!(
+            cell_d1_reloaded.value().unwrap(),
+            "new_cell_string"
+        );
+
+        let _ = fs::remove_file(&book.path);
+        let _ = fs::remove_file(copy_path);
+    }
 }
