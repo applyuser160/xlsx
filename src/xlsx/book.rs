@@ -42,7 +42,7 @@ pub struct Book {
     pub worksheets: HashMap<String, Arc<Mutex<Xml>>>,
 
     /// `xl/sharedStrings.xml`
-    pub shared_strings: Xml,
+    pub shared_strings: Arc<Mutex<Xml>>,
 
     /// `xl/styles.xml`
     pub styles: Xml,
@@ -67,7 +67,7 @@ impl Book {
         let mut drawings: HashMap<String, Xml> = HashMap::new();
         let mut themes: HashMap<String, Xml> = HashMap::new();
         let mut worksheets: HashMap<String, Arc<Mutex<Xml>>> = HashMap::new();
-        let mut shared_strings: Xml = Xml::new(&String::new());
+        let mut shared_strings: Arc<Mutex<Xml>> = Arc::new(Mutex::new(Xml::new(&String::new())));
         let mut styles: Xml = Xml::new(&String::new());
         let mut workbook: Xml = Xml::new(&String::new());
 
@@ -91,7 +91,7 @@ impl Book {
                 } else if name == STYLES_FILENAME {
                     styles = xml;
                 } else if name == SHARED_STRINGS_FILENAME {
-                    shared_strings = xml;
+                    shared_strings = Arc::new(Mutex::new(xml));
                 }
             } else if name.ends_with(XML_RELS_SUFFIX) && name.starts_with(WORKBOOK_RELS_PREFIX) {
                 let mut contents: String = String::new();
@@ -250,24 +250,7 @@ impl Book {
         }
 
         // Sheetオブジェクトを作成して返す
-        Sheet::new(title, arc_mutex_xml)
-    }
-}
-
-impl Book {
-    pub fn save(&self) {
-        let file: File = File::open(&self.path).unwrap();
-        let mut archive: ZipArchive<File> = ZipArchive::new(file).unwrap();
-
-        let mut buffer: Cursor<Vec<u8>> = Cursor::new(Vec::new());
-        let mut zip_writer: ZipWriter<&mut Cursor<Vec<u8>>> = ZipWriter::new(&mut buffer);
-        let options: FileOptions =
-            FileOptions::default().compression_method(zip::CompressionMethod::Stored);
-
-        // 構造体内のxmlを集合
-        let xmls: HashMap<String, Xml> = self.merge_xmls();
-
-        Book::write_file(&mut archive, &xmls, &mut zip_writer, &options);
+        Sheet::new(title, arc_mutex_xml, self.shared_strings.clone())
     }
 
     pub fn copy(&self, path: &str) {
@@ -294,6 +277,23 @@ impl Book {
         // ファイルを閉じる（ZipWriterのdropで自動的に行われるが、明示的にfinishを呼ぶ）
         zip_writer.finish().unwrap();
     }
+}
+
+impl Book {
+    pub fn save(&self) {
+        let file: File = File::open(&self.path).unwrap();
+        let mut archive: ZipArchive<File> = ZipArchive::new(file).unwrap();
+
+        let mut buffer: Cursor<Vec<u8>> = Cursor::new(Vec::new());
+        let mut zip_writer: ZipWriter<&mut Cursor<Vec<u8>>> = ZipWriter::new(&mut buffer);
+        let options: FileOptions =
+            FileOptions::default().compression_method(zip::CompressionMethod::Stored);
+
+        // 構造体内のxmlを集合
+        let xmls: HashMap<String, Xml> = self.merge_xmls();
+
+        Book::write_file(&mut archive, &xmls, &mut zip_writer, &options);
+    }
 
     /// 構造体内のxmlを集合
     pub fn merge_xmls(&self) -> HashMap<String, Xml> {
@@ -302,7 +302,7 @@ impl Book {
         xmls.insert(STYLES_FILENAME.to_string(), self.styles.clone());
         xmls.insert(
             SHARED_STRINGS_FILENAME.to_string(),
-            self.shared_strings.clone(),
+            self.shared_strings.lock().unwrap().clone(),
         );
         xmls.extend(self.drawings.clone());
 
@@ -377,9 +377,10 @@ impl Book {
         for sheet_tag in sheet_tags {
             let id: &str = sheet_tag.attributes.get("r:id").unwrap().as_str();
             let sheet_path: &String = sheet_paths.get(id).unwrap();
+        let trimmed_path = sheet_path.trim_start_matches("/xl/").trim_start_matches("xl/");
             result.insert(
                 sheet_tag.attributes.get("name").unwrap().clone(),
-                format!("xl/{}", sheet_path),
+            format!("xl/{}", trimmed_path),
             );
         }
         result
@@ -390,7 +391,7 @@ impl Book {
         let sheet_paths: HashMap<String, String> = self.get_sheet_paths();
         if let Some(sheet_path) = sheet_paths.get(name) {
             if let Some(xml) = self.worksheets.get(sheet_path) {
-                return Some(Sheet::new(name.to_string(), xml.clone()));
+                return Some(Sheet::new(name.to_string(), xml.clone(), self.shared_strings.clone()));
             }
         }
         None
