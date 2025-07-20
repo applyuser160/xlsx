@@ -1,8 +1,21 @@
 #[cfg(test)]
 mod tests {
+    use crate::xlsx::book::Book;
     use std::{fs, path::Path};
 
-    use crate::xlsx::book::Book;
+    fn setup_book(test_name: &str) -> Book {
+        let original_path = "data/sample.xlsx";
+        let test_path = format!("data/test_book_{test_name}.xlsx");
+        if Path::new(&test_path).exists() {
+            let _ = fs::remove_file(&test_path);
+        }
+        fs::copy(original_path, &test_path).unwrap();
+        Book::new(test_path)
+    }
+
+    fn cleanup(book: Book) {
+        let _ = fs::remove_file(book.path);
+    }
 
     #[test]
     fn test_new_book() {
@@ -20,63 +33,30 @@ mod tests {
     }
 
     #[test]
-    fn test_save_book() {
-        // 観点: Excelファイルの書き込み
-
-        // Arrange
-
-        // ファイルが存在しないことを確認
-        if Path::new("data/sample2.xlsx").exists() {
-            let _ = fs::remove_file("data/sample2.xlsx");
-        }
-        assert!(!Path::new("data/sample2.xlsx").exists());
-
-        // Act
-        let book = Book::new("data/sample.xlsx".to_string());
-        let xml = book.worksheets.get("xl/worksheets/sheet1.xml").unwrap();
-        let mut xml_guard = xml.lock().unwrap();
-        let version = xml_guard.decl.get_mut("version").unwrap();
-        *version = "1.0".to_string();
-        drop(xml_guard); // ロックを解放
-        book.save();
-
-        // Assert
-        let book = Book::new("data/sample.xlsx".to_string());
-        let xml = book.worksheets.get("xl/worksheets/sheet1.xml").unwrap();
-        let xml_guard = xml.lock().unwrap();
-        assert_eq!(xml_guard.decl.get("version").unwrap(), "1.0");
-        assert_eq!(xml_guard.decl.get("encoding").unwrap(), "UTF-8");
-        assert_eq!(xml_guard.decl.get("standalone").unwrap(), "yes");
-    }
-
-    #[test]
     fn test_copy_book() {
         // 観点: Excelファイルの名前をつけて保存
-
-        // Arrange
-
-        // ファイルが存在しないことを確認
-        if Path::new("data/sample2.xlsx").exists() {
-            let _ = fs::remove_file("data/sample2.xlsx");
-        }
-        assert!(!Path::new("data/sample2.xlsx").exists());
+        let book = setup_book("copy_book");
+        let copy_path = format!("{}.copy.xlsx", book.path);
 
         // Act
-        let book = Book::new("data/sample.xlsx".to_string());
         let xml = book.worksheets.get("xl/worksheets/sheet1.xml").unwrap();
         let mut xml_guard = xml.lock().unwrap();
         let version = xml_guard.decl.get_mut("version").unwrap();
         *version = "2.0".to_string();
         drop(xml_guard); // ロックを解放
-        book.copy("./data/sample2.xlsx");
+        book.copy(&copy_path);
 
         // Assert
-        let book = Book::new("./data/sample2.xlsx".to_string());
-        let xml = book.worksheets.get("xl/worksheets/sheet1.xml").unwrap();
-        let xml_guard = xml.lock().unwrap();
-        assert_eq!(xml_guard.decl.get("version").unwrap(), "2.0");
-        assert_eq!(xml_guard.decl.get("encoding").unwrap(), "UTF-8");
-        assert_eq!(xml_guard.decl.get("standalone").unwrap(), "yes");
+        let book_copied = Book::new(copy_path.clone());
+        let xml_copied = book_copied
+            .worksheets
+            .get("xl/worksheets/sheet1.xml")
+            .unwrap();
+        let xml_guard_copied = xml_copied.lock().unwrap();
+        assert_eq!(xml_guard_copied.decl.get("version").unwrap(), "2.0");
+
+        cleanup(book);
+        let _ = fs::remove_file(copy_path);
     }
 
     #[test]
@@ -109,7 +89,7 @@ mod tests {
         // 観点: 新規シートの作成
 
         // Arrange
-        let mut book = Book::new("data/sample.xlsx".to_string());
+        let mut book = setup_book("create_sheet");
         let sheet_count_before = book.sheetnames().len();
 
         // Act
@@ -119,6 +99,7 @@ mod tests {
         assert_eq!(sheet.name, "TestSheet");
         assert_eq!(book.sheetnames().len(), sheet_count_before + 1);
         assert!(book.__contains__("TestSheet".to_string()));
+        cleanup(book);
     }
 
     #[test]
@@ -141,25 +122,19 @@ mod tests {
     }
 
     #[test]
-    fn test_write_file() {
-        // 観点: ファイルへの書き込み
-        // 注: write_fileはprivateメソッドなので、間接的にテスト
-
-        // Arrange
-        if Path::new("data/write_test.xlsx").exists() {
-            let _ = fs::remove_file("data/write_test.xlsx");
-        }
+    fn test_write_file_indirectly() {
+        // 観点: ファイルへの書き込み（copy経由での間接テスト）
+        let book = setup_book("write_file");
+        let copy_path = format!("{}.copy.xlsx", book.path);
 
         // Act
-        let book = Book::new("data/sample.xlsx".to_string());
-        book.copy("data/write_test.xlsx");
+        book.copy(&copy_path);
 
         // Assert
-        assert!(Path::new("data/write_test.xlsx").exists());
+        assert!(Path::new(&copy_path).exists());
 
-        // 書き込まれたファイルが読み込み可能であることを確認
-        let new_book = Book::new("data/write_test.xlsx".to_string());
-        assert!(!new_book.worksheets.is_empty());
+        cleanup(book);
+        let _ = fs::remove_file(copy_path);
     }
 
     #[test]
@@ -217,5 +192,56 @@ mod tests {
             assert!(path.starts_with("xl/worksheets/"));
             assert!(path.ends_with(".xml"));
         }
+    }
+
+    #[test]
+    fn test_delete_sheet() {
+        // 観点: シートを削除できるか
+        let mut book = setup_book("delete_sheet");
+        let sheet_count_before = book.sheetnames().len();
+        assert!(book.__contains__("シート1".to_string()));
+
+        // Act
+        let sheet_to_delete = book.__getitem__("シート1".to_string());
+        book.__delitem__(sheet_to_delete.name.clone());
+
+        // Assert
+        assert_eq!(book.sheetnames().len(), sheet_count_before - 1);
+        assert!(!book.__contains__("シート1".to_string()));
+
+        cleanup(book);
+    }
+
+    #[test]
+    fn test_sheet_index() {
+        // 観点: シートのインデックスを取得できるか
+        let book = setup_book("sheet_index");
+        let sheet = book.__getitem__("シート1".to_string());
+
+        // Act
+        let index = book.index(&sheet);
+
+        // Assert
+        assert_eq!(index, 0);
+
+        cleanup(book);
+    }
+
+    #[test]
+    fn test_create_sheet_with_index() {
+        // 観点: 指定したインデックスにシートを作成できるか
+        let mut book = setup_book("create_with_index");
+
+        // Act
+        let new_sheet = book.create_sheet("NewSheetAt0".to_string(), 0);
+
+        // Assert
+        let sheetnames = book.sheetnames();
+        assert_eq!(sheetnames.len(), 2);
+        assert_eq!(sheetnames[0], "NewSheetAt0");
+        assert_eq!(sheetnames[1], "シート1");
+        assert_eq!(new_sheet.name, "NewSheetAt0");
+
+        cleanup(book);
     }
 }

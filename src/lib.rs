@@ -3,6 +3,8 @@ mod xlsx {
     pub mod cell;
     pub mod sheet;
     pub mod test_book;
+    pub mod test_cell;
+    pub mod test_sheet;
     pub mod test_xml;
     pub mod xml;
 }

@@ -58,7 +58,7 @@ impl Book {
     pub fn new(path: String) -> Self {
         let file_result: Result<File, std::io::Error> = File::open(&path);
         if file_result.is_err() {
-            panic!("File not found: {}", path);
+            panic!("File not found: {path}");
         }
         let file = file_result.unwrap();
         let mut archive: ZipArchive<File> = ZipArchive::new(file).unwrap();
@@ -132,7 +132,7 @@ impl Book {
         if let Some(sheet) = self.get_sheet_by_name(key.as_str()) {
             return sheet;
         }
-        panic!("No sheet named '{}'", key);
+        panic!("No sheet named '{key}'");
     }
 
     pub fn __delitem__(&mut self, key: String) {
@@ -140,7 +140,7 @@ impl Book {
             self.remove(&sheet);
             return;
         }
-        panic!("No sheet named '{}'", key);
+        panic!("No sheet named '{key}'");
     }
 
     pub fn index(&self, sheet: &Sheet) -> usize {
@@ -149,15 +149,52 @@ impl Book {
         if let Some(sheet_index) = sheet_names.iter().position(|x| x == sheet_name) {
             return sheet_index;
         }
-        panic!("No sheet named '{}'", sheet_name);
+        panic!("No sheet named '{sheet_name}'");
     }
 
     pub fn remove(&mut self, sheet: &Sheet) {
-        if self.worksheets.contains_key(&sheet.name) {
-            self.worksheets.remove(&sheet.name);
-            return;
+        let sheet_paths = self.get_sheet_paths();
+        if let Some(sheet_path) = sheet_paths.get(&sheet.name) {
+            if self.worksheets.contains_key(sheet_path) {
+                self.worksheets.remove(sheet_path);
+
+                // workbook.xmlからsheetタグを削除し、r:idを取得
+                let mut rid_to_remove = String::new();
+                if let Some(workbook_tag) = self.workbook.elements.first_mut() {
+                    if let Some(sheets_tag) = workbook_tag
+                        .children
+                        .iter_mut()
+                        .find(|x| x.name == "sheets")
+                    {
+                        if let Some(sheet_element) = sheets_tag
+                            .children
+                            .iter()
+                            .find(|s| s.attributes.get("name") == Some(&sheet.name))
+                        {
+                            if let Some(rid) = sheet_element.attributes.get("r:id") {
+                                rid_to_remove = rid.clone();
+                            }
+                        }
+                        sheets_tag
+                            .children
+                            .retain(|s| s.attributes.get("name") != Some(&sheet.name));
+                    }
+                }
+
+                // workbook.xml.relsからRelationshipタグを削除
+                if !rid_to_remove.is_empty() {
+                    if let Some(workbook_rels) = self.rels.get_mut("xl/_rels/workbook.xml.rels") {
+                        if let Some(relationships_tag) = workbook_rels.elements.first_mut() {
+                            relationships_tag
+                                .children
+                                .retain(|r| r.attributes.get("Id") != Some(&rid_to_remove));
+                        }
+                    }
+                }
+                return;
+            }
         }
-        panic!("No sheet named '{}'", sheet.name)
+        panic!("No sheet named '{}'", sheet.name);
     }
 
     pub fn create_sheet(&mut self, title: String, index: usize) -> Sheet {
@@ -167,7 +204,7 @@ impl Book {
         let next_rid: String = format!("rId{}", self.get_relationships().len() + 1);
 
         // シートパスを作成
-        let sheet_path: String = format!("xl/worksheets/sheet{}.xml", next_sheet_id);
+        let sheet_path: String = format!("xl/worksheets/sheet{next_sheet_id}.xml");
 
         // 空のワークシートXMLを作成
         let worksheet_xml: Xml = Xml::new(
@@ -241,7 +278,7 @@ impl Book {
                 );
                 relationship_element.attributes.insert(
                     "Target".to_string(),
-                    format!("worksheets/sheet{}.xml", next_sheet_id),
+                    format!("worksheets/sheet{next_sheet_id}.xml"),
                 );
 
                 // 関係を追加
@@ -382,7 +419,7 @@ impl Book {
                 .trim_start_matches("xl/");
             result.insert(
                 sheet_tag.attributes.get("name").unwrap().clone(),
-                format!("xl/{}", trimmed_path),
+                format!("xl/{trimmed_path}"),
             );
         }
         result
