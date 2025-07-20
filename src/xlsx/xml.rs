@@ -16,6 +16,18 @@ pub struct Xml {
     /// タグリスト
     pub elements: Vec<XmlElement>,
 }
+#[pymethods]
+impl XmlElement {
+    #[new]
+    pub fn new(name: &str) -> Self {
+        XmlElement {
+            name: name.to_string(),
+            attributes: HashMap::new(),
+            children: Vec::new(),
+            text: None,
+        }
+    }
+}
 
 #[pyclass]
 #[derive(Debug, Clone)]
