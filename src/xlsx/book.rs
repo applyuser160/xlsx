@@ -377,10 +377,12 @@ impl Book {
         for sheet_tag in sheet_tags {
             let id: &str = sheet_tag.attributes.get("r:id").unwrap().as_str();
             let sheet_path: &String = sheet_paths.get(id).unwrap();
-        let trimmed_path = sheet_path.trim_start_matches("/xl/").trim_start_matches("xl/");
+            let trimmed_path = sheet_path
+                .trim_start_matches("/xl/")
+                .trim_start_matches("xl/");
             result.insert(
                 sheet_tag.attributes.get("name").unwrap().clone(),
-            format!("xl/{}", trimmed_path),
+                format!("xl/{}", trimmed_path),
             );
         }
         result
@@ -391,7 +393,11 @@ impl Book {
         let sheet_paths: HashMap<String, String> = self.get_sheet_paths();
         if let Some(sheet_path) = sheet_paths.get(name) {
             if let Some(xml) = self.worksheets.get(sheet_path) {
-                return Some(Sheet::new(name.to_string(), xml.clone(), self.shared_strings.clone()));
+                return Some(Sheet::new(
+                    name.to_string(),
+                    xml.clone(),
+                    self.shared_strings.clone(),
+                ));
             }
         }
         None
