@@ -1,6 +1,5 @@
 use crate::xlsx::xml::{Xml, XmlElement};
 use pyo3::prelude::*;
-use std::collections::HashMap;
 use std::sync::{Arc, Mutex};
 
 #[pyclass]
@@ -124,7 +123,9 @@ impl Cell {
         let sst_index = self.get_or_create_shared_string(value);
         let mut xml = self.sheet_xml.lock().unwrap();
         let cell_element = self.get_or_create_cell_element(&mut xml);
-        cell_element.attributes.insert("t".to_string(), "s".to_string());
+        cell_element
+            .attributes
+            .insert("t".to_string(), "s".to_string());
         if let Some(v) = cell_element.children.iter_mut().find(|c| c.name == "v") {
             v.text = Some(sst_index.to_string());
         } else {

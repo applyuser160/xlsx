@@ -106,10 +106,7 @@ mod tests {
         let cell_c1_reloaded = sheet_reloaded.__getitem__("C1");
         let cell_d1_reloaded = sheet_reloaded.__getitem__("D1");
         assert_eq!(cell_c1_reloaded.value().unwrap(), "12345");
-        assert_eq!(
-            cell_d1_reloaded.value().unwrap(),
-            "new_cell_string"
-        );
+        assert_eq!(cell_d1_reloaded.value().unwrap(), "new_cell_string");
 
         let _ = fs::remove_file(&book.path);
         let _ = fs::remove_file(copy_path);
