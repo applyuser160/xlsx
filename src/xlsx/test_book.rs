@@ -244,4 +244,42 @@ mod tests {
 
         cleanup(book);
     }
+
+    #[test]
+    fn test_set_print_area() {
+        // 観点: 印刷範囲を設定できるか
+        let mut book = setup_book("set_print_area");
+
+        // Act
+        book.set_print_area("シート1", "A1:B10");
+
+        // Assert
+        let workbook = &book.workbook.elements[0];
+        let defined_names = workbook.children.iter().find(|e| e.name == "definedNames").unwrap();
+        let defined_name = defined_names.children.iter().find(|dn| dn.attributes.get("name").unwrap() == "_xlnm.Print_Area").unwrap();
+        assert_eq!(defined_name.text.as_ref().unwrap(), "'シート1'!A1:B10");
+        assert_eq!(defined_name.attributes.get("localSheetId").unwrap(), "0");
+
+        cleanup(book);
+    }
+
+    #[test]
+    fn test_copy_worksheet() {
+        // 観点: シートをコピーできるか
+        let mut book = setup_book("copy_worksheet");
+
+        // Act
+        let copied_sheet = book.copy_worksheet("シート1", "シート1 コピー");
+
+        // Assert
+        assert_eq!(copied_sheet.name, "シート1 コピー");
+        assert!(book.__contains__("シート1 コピー"));
+
+        let original_sheet = book.__getitem__("シート1".to_string());
+        let original_xml = original_sheet.xml.lock().unwrap();
+        let copied_xml = copied_sheet.xml.lock().unwrap();
+        assert_eq!(original_xml.elements, copied_xml.elements);
+
+        cleanup(book);
+    }
 }
