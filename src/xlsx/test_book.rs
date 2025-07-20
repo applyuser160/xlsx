@@ -273,7 +273,7 @@ mod tests {
 
         // Assert
         assert_eq!(copied_sheet.name, "シート1 コピー");
-        assert!(book.__contains__("シート1 コピー"));
+        assert!(book.__contains__("シート1 コピー".to_string()));
 
         let original_sheet = book.__getitem__("シート1".to_string());
         let original_xml = original_sheet.xml.lock().unwrap();
