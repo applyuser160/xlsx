@@ -335,6 +335,11 @@ impl Sheet {
         col_num
     }
 
+    #[cfg(test)]
+    pub(crate) fn get_xml(&self) -> Arc<Mutex<Xml>> {
+        self.xml.clone()
+    }
+
     fn col_num_to_str(col_num: usize) -> String {
         let mut col_str = String::new();
         let mut col_num = col_num;
