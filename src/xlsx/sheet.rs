@@ -35,6 +35,10 @@ impl Sheet {
 }
 
 impl Sheet {
+    #[cfg(test)]
+    pub(crate) fn get_xml(&self) -> Arc<Mutex<Xml>> {
+        self.xml.clone()
+    }
     fn coordinate_to_string(row: usize, col: usize) -> String {
         let mut col_str = String::new();
         let mut col_num = col;
