@@ -52,7 +52,7 @@ impl Xml {
                     decl = Xml::parse_decl_element(e);
                 }
                 Ok(Event::Eof) => break,
-                Err(e) => panic!("エラー: {:?}", e),
+                Err(e) => panic!("エラー: {e:?}"),
                 _ => {}
             }
             buf.clear();

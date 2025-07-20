@@ -58,7 +58,7 @@ impl Book {
     pub fn new(path: String) -> Self {
         let file_result: Result<File, std::io::Error> = File::open(&path);
         if file_result.is_err() {
-            panic!("File not found: {}", path);
+            panic!("File not found: {path}");
         }
         let file = file_result.unwrap();
         let mut archive: ZipArchive<File> = ZipArchive::new(file).unwrap();
@@ -132,7 +132,7 @@ impl Book {
         if let Some(sheet) = self.get_sheet_by_name(key.as_str()) {
             return sheet;
         }
-        panic!("No sheet named '{}'", key);
+        panic!("No sheet named '{key}'");
     }
 
     pub fn __delitem__(&mut self, key: String) {
@@ -140,7 +140,7 @@ impl Book {
             self.remove(&sheet);
             return;
         }
-        panic!("No sheet named '{}'", key);
+        panic!("No sheet named '{key}'");
     }
 
     pub fn index(&self, sheet: &Sheet) -> usize {
@@ -149,15 +149,29 @@ impl Book {
         if let Some(sheet_index) = sheet_names.iter().position(|x| x == sheet_name) {
             return sheet_index;
         }
-        panic!("No sheet named '{}'", sheet_name);
+        panic!("No sheet named '{sheet_name}'");
     }
 
     pub fn remove(&mut self, sheet: &Sheet) {
-        if self.worksheets.contains_key(&sheet.name) {
-            self.worksheets.remove(&sheet.name);
-            return;
+        let sheet_paths = self.get_sheet_paths();
+        if let Some(sheet_path) = sheet_paths.get(&sheet.name) {
+            if self.worksheets.contains_key(sheet_path) {
+                self.worksheets.remove(sheet_path);
+
+                // workbook.xmlからsheetタグを削除
+                if let Some(workbook_tag) = self.workbook.elements.first_mut() {
+                    if let Some(sheets_tag) =
+                        workbook_tag.children.iter_mut().find(|x| x.name == "sheets")
+                    {
+                        sheets_tag
+                            .children
+                            .retain(|s| s.attributes.get("name") != Some(&sheet.name));
+                    }
+                }
+                return;
+            }
         }
-        panic!("No sheet named '{}'", sheet.name)
+        panic!("No sheet named '{}'", sheet.name);
     }
 
     pub fn create_sheet(&mut self, title: String, index: usize) -> Sheet {
@@ -167,7 +181,7 @@ impl Book {
         let next_rid: String = format!("rId{}", self.get_relationships().len() + 1);
 
         // シートパスを作成
-        let sheet_path: String = format!("xl/worksheets/sheet{}.xml", next_sheet_id);
+        let sheet_path: String = format!("xl/worksheets/sheet{next_sheet_id}.xml");
 
         // 空のワークシートXMLを作成
         let worksheet_xml: Xml = Xml::new(
@@ -241,7 +255,7 @@ impl Book {
                 );
                 relationship_element.attributes.insert(
                     "Target".to_string(),
-                    format!("worksheets/sheet{}.xml", next_sheet_id),
+                    format!("worksheets/sheet{next_sheet_id}.xml"),
                 );
 
                 // 関係を追加
@@ -377,10 +391,12 @@ impl Book {
         for sheet_tag in sheet_tags {
             let id: &str = sheet_tag.attributes.get("r:id").unwrap().as_str();
             let sheet_path: &String = sheet_paths.get(id).unwrap();
-        let trimmed_path = sheet_path.trim_start_matches("/xl/").trim_start_matches("xl/");
+            let trimmed_path = sheet_path
+                .trim_start_matches("/xl/")
+                .trim_start_matches("xl/");
             result.insert(
                 sheet_tag.attributes.get("name").unwrap().clone(),
-            format!("xl/{}", trimmed_path),
+                format!("xl/{trimmed_path}"),
             );
         }
         result
@@ -391,7 +407,11 @@ impl Book {
         let sheet_paths: HashMap<String, String> = self.get_sheet_paths();
         if let Some(sheet_path) = sheet_paths.get(name) {
             if let Some(xml) = self.worksheets.get(sheet_path) {
-                return Some(Sheet::new(name.to_string(), xml.clone(), self.shared_strings.clone()));
+                return Some(Sheet::new(
+                    name.to_string(),
+                    xml.clone(),
+                    self.shared_strings.clone(),
+                ));
             }
         }
         None
