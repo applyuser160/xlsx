@@ -68,10 +68,10 @@ mod tests {
         let version = xml_guard.decl.get_mut("version").unwrap();
         *version = "2.0".to_string();
         drop(xml_guard); // ロックを解放
-        book.copy("data/sample2.xlsx");
+        book.copy("./data/sample2.xlsx");
 
         // Assert
-        let book = Book::new("data/sample2.xlsx".to_string());
+        let book = Book::new("./data/sample2.xlsx".to_string());
         let xml = book.worksheets.get("xl/worksheets/sheet1.xml").unwrap();
         let xml_guard = xml.lock().unwrap();
         assert_eq!(xml_guard.decl.get("version").unwrap(), "2.0");

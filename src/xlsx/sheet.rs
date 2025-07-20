@@ -20,11 +20,7 @@ impl Sheet {
     // }
 
     pub fn __getitem__(&self, key: &str) -> Cell {
-        Cell::new(
-            self.xml.clone(),
-            self.shared_strings.clone(),
-            key.to_string(),
-        )
+        Cell::new(self.xml.clone(), self.shared_strings.clone(), key.to_string())
     }
 
     #[pyo3(signature = (row, column))]

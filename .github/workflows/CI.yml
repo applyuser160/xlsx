@@ -26,6 +26,8 @@ jobs:
     steps:
       - uses: actions/checkout@v4
       - uses: ./.github/actions/cache_cargo
+      - name: List files
+        run: ls -R
       - name: test
         run: cargo test
 
