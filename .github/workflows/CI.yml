@@ -25,6 +25,8 @@ jobs:
       RUSTC_FORCE_INCREMENTAL: 1
     steps:
       - uses: actions/checkout@v4
+        with:
+          lfs: true
       - uses: ./.github/actions/cache_cargo
       - name: test
         run: cargo test

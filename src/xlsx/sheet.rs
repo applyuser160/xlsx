@@ -2,12 +2,15 @@ use std::sync::{Arc, Mutex};
 
 use pyo3::prelude::*;
 
+use crate::xlsx::cell::Cell;
 use crate::xlsx::xml::Xml;
 
 #[pyclass]
 pub struct Sheet {
+    #[pyo3(get)]
     pub name: String,
     xml: Arc<Mutex<Xml>>,
+    shared_strings: Arc<Mutex<Xml>>,
 }
 
 #[pymethods]
@@ -16,25 +19,35 @@ impl Sheet {
     //     format!("<Sheet name='{}'>", self.name)
     // }
 
-    // pub fn __getitem__(&mut self, key: String) -> Cell {
-    //     let cell_ref = self.value.get_cell_mut(key);
-    //     Cell::new(cell_ref)
-    // }
+    pub fn __getitem__(&self, key: &str) -> Cell {
+        Cell::new(self.xml.clone(), self.shared_strings.clone(), key.to_string())
+    }
 
-    // pub fn cell(&mut self, row: usize, col: usize) -> Cell {
-    //     let cell_ref = self.value.get_cell_mut((row as u32, col as u32));
-    //     Cell::new(cell_ref)
-    // }
-
-    // pub fn set_value(&mut self, row: usize, col: usize, value: String) {
-    //     let cell = self.value.get_cell_mut((row as u32, col as u32));
-    //     cell.set_value(value);
-    // }
+    #[pyo3(signature = (row, column))]
+    pub fn cell(&self, row: usize, column: usize) -> Cell {
+        let address = Self::coordinate_to_string(row, column);
+        Cell::new(self.xml.clone(), self.shared_strings.clone(), address)
+    }
 }
 
 impl Sheet {
-    pub fn new(name: String, xml: Arc<Mutex<Xml>>) -> Self {
-        Sheet { name, xml }
+    fn coordinate_to_string(row: usize, col: usize) -> String {
+        let mut col_str = String::new();
+        let mut col_num = col;
+        while col_num > 0 {
+            let remainder = (col_num - 1) % 26;
+            col_str.insert(0, (b'A' + remainder as u8) as char);
+            col_num = (col_num - 1) / 26;
+        }
+        format!("{}{}", col_str, row)
+    }
+
+    pub fn new(name: String, xml: Arc<Mutex<Xml>>, shared_strings: Arc<Mutex<Xml>>) -> Self {
+        Sheet {
+            name,
+            xml,
+            shared_strings,
+        }
     }
 
     // pub fn get_name(&self) -> &str {
