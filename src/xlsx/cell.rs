@@ -1,7 +1,6 @@
 use crate::xlsx::xml::{Xml, XmlElement};
 use chrono::{Datelike, NaiveDateTime};
 use pyo3::prelude::*;
-use std::collections::HashMap;
 use std::sync::{Arc, Mutex};
 
 #[pyclass]
