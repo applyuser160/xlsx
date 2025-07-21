@@ -1,6 +1,6 @@
 #[cfg(test)]
 mod tests {
-    use crate::xlsx::book::Book;
+    use crate::xlsx_module::book::Book;
 
     #[test]
     fn test_getitem() {
