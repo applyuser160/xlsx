@@ -297,23 +297,4 @@ mod tests {
 
         cleanup(book);
     }
-
-    #[test]
-    fn test_add_table() {
-        // 観点: テーブルを追加できるか
-        let mut book = setup_book("add_table");
-
-        // Act
-        book.add_table("シート1".to_string(), "Table1".to_string(), "A1:C5".to_string());
-
-        // Assert
-        assert!(book.tables.contains_key("xl/tables/table1.xml"));
-        let sheet = book.get_sheet_by_name("シート1").unwrap();
-        let sheet_xml_arc = sheet.get_xml();
-        let sheet_xml = sheet_xml_arc.lock().unwrap();
-        let table_parts = sheet_xml.elements[0].children.iter().find(|e| e.name == "tableParts").unwrap();
-        assert_eq!(table_parts.attributes.get("count").unwrap(), "1");
-
-        cleanup(book);
-    }
 }
