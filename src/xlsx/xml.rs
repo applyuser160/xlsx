@@ -5,22 +5,22 @@ use std::collections::HashMap;
 use std::fs::OpenOptions;
 use std::io::{BufRead, BufWriter, Write};
 
-/// A struct that represents an XML file.
+/// XMLファイルを表す構造体
 ///
-/// This struct holds the XML declaration and a list of root elements.
+/// この構造体はXML宣言とルート要素のリストを保持
 #[pyclass]
 #[derive(Debug, Clone)]
 pub struct Xml {
-    /// The XML declaration, e.g., `<?xml version="1.0" encoding="UTF-8" standalone="yes"?>`.
+    /// XML宣言
     ///
-    /// The key-value pairs represent the attributes of the declaration.
+    /// キーと値のペアは宣言の属性を表す
     pub decl: HashMap<String, String>,
-    /// A list of root elements in the XML file.
+    /// XMLファイル内のルート要素のリスト
     pub elements: Vec<XmlElement>,
 }
 #[pymethods]
 impl XmlElement {
-    /// Creates a new `XmlElement` with the given tag name.
+    /// 与えられたタグ名で新しい `XmlElement` を作成
     #[new]
     pub fn new(name: &str) -> Self {
         XmlElement {
@@ -33,9 +33,9 @@ impl XmlElement {
 }
 
 impl Xml {
-    /// Gets a mutable reference to a child element by its tag name.
+    /// タグ名で子要素への可変参照を取得
     ///
-    /// If the child element does not exist, it will be created.
+    /// 子要素が存在しない場合は作成
     pub fn get_mut_or_create_child_by_tag(&mut self, tag_name: &str) -> &mut XmlElement {
         let style_sheet = self.elements.first_mut().unwrap();
         let position = style_sheet.children.iter().position(|c| c.name == tag_name);
@@ -50,46 +50,46 @@ impl Xml {
     }
 }
 
-/// A struct that represents an XML element.
+/// XML要素を表す構造体
 ///
-/// This struct holds the tag name, attributes, child elements, and text content of an XML element.
+/// この構造体はタグ名、属性、子要素、テキストコンテンツを保持
 #[pyclass]
 #[derive(Debug, Clone)]
 pub struct XmlElement {
-    /// The tag name of the element.
+    /// 要素のタグ名
     pub name: String,
 
-    /// The attributes of the element.
+    /// 要素の属性
     pub attributes: HashMap<String, String>,
 
-    /// The child elements of the element.
+    /// 要素の子要素
     pub children: Vec<XmlElement>,
 
-    /// The text content of the element.
+    /// 要素のテキストコンテンツ
     pub text: Option<String>,
 }
 
 impl Xml {
-    /// Creates a new `Xml` instance from a string.
+    /// 文字列から新しい `Xml` インスタンスを作成
     ///
-    /// This function parses the XML string and builds the `Xml` struct.
+    /// この関数はXML文字列を解析し、 `Xml` 構造体を構築
     pub fn new(contents: &str) -> Self {
         let mut reader = Reader::from_str(contents);
         let mut buf: Vec<u8> = Vec::new();
         let mut elements: Vec<XmlElement> = Vec::new();
         let mut decl: HashMap<String, String> = HashMap::new();
 
-        // Parse the XML string
+        // XML文字列を解析
         loop {
             match reader.read_event_into(&mut buf) {
                 Ok(Event::Start(ref e)) => {
-                    // Parse the root element
+                    // ルート要素を解析
                     let root: XmlElement = Xml::parse_element(&mut reader, e);
                     elements.push(root);
                     break;
                 }
                 Ok(Event::Decl(ref e)) => {
-                    // Parse the XML declaration
+                    // XML宣言を解析
                     decl = Xml::parse_decl_element(e);
                 }
                 Ok(Event::Eof) => break,
@@ -101,7 +101,7 @@ impl Xml {
         Self { decl, elements }
     }
 
-    /// Saves the `Xml` struct to a file.
+    /// `Xml` 構造体をファイルに保存
     pub fn save_file(&self, path: &str) {
         let file = OpenOptions::new()
             .write(true)
@@ -111,23 +111,23 @@ impl Xml {
             .unwrap();
         let writer = BufWriter::new(file);
         let mut xml_writer = Writer::new(writer);
-        // Write the XML declaration
+        // XML宣言を書き込み
         Xml::write_decl(&mut xml_writer, &self.decl);
-        // Write the elements
+        // 要素を書き込み
         for element in &self.elements {
             Xml::write_element(&mut xml_writer, element);
         }
     }
 
-    /// Converts the `Xml` struct to a byte vector.
+    /// `Xml` 構造体をバイトベクターに変換
     pub fn to_buf(&self) -> Vec<u8> {
         let mut buffer = Vec::new();
         let mut xml_writer = Writer::new(&mut buffer);
 
-        // Write the XML declaration
+        // XML宣言を書き込み
         Xml::write_decl(&mut xml_writer, &self.decl);
 
-        // Write the elements
+        // 要素を書き込み
         for element in &self.elements {
             Xml::write_element(&mut xml_writer, element);
         }
@@ -135,12 +135,12 @@ impl Xml {
         buffer
     }
 
-    /// Parses a regular XML element.
+    /// 通常のXML要素を解析
     fn parse_element<R: BufRead>(
         reader: &mut Reader<R>,
         start_tag: &quick_xml::events::BytesStart,
     ) -> XmlElement {
-        // Get the tag name and attributes
+        // タグ名と属性を取得
         let name: String = Xml::get_name(start_tag);
         let attributes: HashMap<String, String> = Xml::get_attributes(start_tag);
 
@@ -148,16 +148,16 @@ impl Xml {
         let mut text: Option<String> = None;
         let mut buf: Vec<u8> = Vec::new();
 
-        // Parse the children and text
+        // 子要素とテキストを解析
         loop {
             match reader.read_event_into(&mut buf) {
-                // Start tag: <name>
+                // 開始タグ: <name>
                 Ok(Event::Start(e)) => {
                     let child: XmlElement = Xml::parse_element(reader, &e);
                     children.push(child);
                 }
 
-                // Text content: <v>text</v>
+                // テキストコンテンツ: <v>text</v>
                 Ok(Event::Text(e)) => {
                     let content: String = e.decode().unwrap().to_string();
                     if !content.trim().is_empty() {
@@ -165,14 +165,14 @@ impl Xml {
                     }
                 }
 
-                // End tag: </name>
+                // 終了タグ: </name>
                 Ok(Event::End(e)) => {
                     if e.name() == start_tag.name() {
                         break;
                     }
                 }
 
-                // Empty element: <name />
+                // 空要素: <name />
                 Ok(Event::Empty(e)) => {
                     let child: XmlElement = Xml::parse_empty_element(&e);
                     children.push(child);
@@ -193,9 +193,9 @@ impl Xml {
         }
     }
 
-    /// Parses an empty XML element.
+    /// 空のXML要素を解析
     fn parse_empty_element(start_tag: &quick_xml::events::BytesStart) -> XmlElement {
-        // Get the tag name and attributes
+        // タグ名と属性を取得
         let name: String = Xml::get_name(start_tag);
         let attributes: HashMap<String, String> = Xml::get_attributes(start_tag);
 
@@ -207,7 +207,7 @@ impl Xml {
         }
     }
 
-    /// Parses the XML declaration element.
+    /// XML宣言要素を解析
     fn parse_decl_element(decl: &quick_xml::events::BytesDecl) -> HashMap<String, String> {
         let mut map = HashMap::new();
 
@@ -235,60 +235,60 @@ impl Xml {
         map
     }
 
-    /// Writes an XML element to the writer.
+    /// XML要素をライターに書き込み
     fn write_element<W: Write>(writer: &mut Writer<W>, element: &XmlElement) {
         let mut start = BytesStart::new(element.name.as_str());
 
-        // Add attributes
+        // 属性を追加
         for (k, v) in &element.attributes {
             start.push_attribute((k.as_str(), v.as_str()));
         }
 
-        // Write empty tag if there are no children and no text
+        // 子要素もテキストもない場合は空タグを書き込み
         if element.children.is_empty() && element.text.is_none() {
             writer.write_event(Event::Empty(start)).unwrap();
             return;
         }
 
-        // Write start tag
+        // 開始タグを書き込み
         writer.write_event(Event::Start(start)).unwrap();
 
-        // Write text content
+        // テキストコンテンツを書き込み
         if let Some(ref text) = element.text {
             writer
                 .write_event(Event::Text(BytesText::new(text)))
                 .unwrap();
         }
 
-        // Write child elements
+        // 子要素を書き込み
         for child in &element.children {
             Xml::write_element(writer, child);
         }
 
-        // Write end tag
+        // 終了タグを書き込み
         writer
             .write_event(Event::End(BytesEnd::new(element.name.as_str())))
             .unwrap();
     }
 
-    /// Writes the XML declaration to the writer.
+    /// XML宣言をライターに書き込み
     fn write_decl<W: Write>(writer: &mut Writer<W>, decl_hash_map: &HashMap<String, String>) {
-        // Create the declaration
+        // 宣言を作成
         let version = decl_hash_map.get("version").map(|e| e.as_str());
         let encoding = decl_hash_map.get("encoding").map(|e| e.as_str());
         let standalone = decl_hash_map.get("standalone").map(|s| s.as_str());
         let decl = BytesDecl::new(version.unwrap_or(""), encoding, standalone);
 
-        // Write the declaration to the file
+        // 宣言をファイルに書き込み
         writer.write_event(Event::Decl(decl)).unwrap();
     }
 
-    /// Gets the tag name from a `BytesStart` event.
+    /// `BytesStart` イベントからタグ名を取得
     fn get_name(start_tag: &quick_xml::events::BytesStart) -> String {
         String::from_utf8_lossy(start_tag.name().as_ref()).to_string()
     }
 
-    /// Gets the attributes from a `BytesStart` event.
+    /// `BytesStart` イベントから属性を取得
     fn get_attributes(start_tag: &quick_xml::events::BytesStart) -> HashMap<String, String> {
         let mut attributes: HashMap<String, String> = HashMap::new();
         for attr in start_tag.attributes().flatten() {

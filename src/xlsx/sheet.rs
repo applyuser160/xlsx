@@ -5,23 +5,23 @@ use pyo3::prelude::*;
 use crate::cell::Cell;
 use crate::xml::Xml;
 
-/// Represents a worksheet in an Excel workbook.
+/// Excelワークブック内のワークシートを表す
 #[pyclass]
 pub struct Sheet {
-    /// The name of the worksheet.
+    /// ワークシートの名前
     #[pyo3(get)]
     pub name: String,
-    /// The XML of the worksheet.
+    /// ワークシートのXML
     xml: Arc<Mutex<Xml>>,
-    /// The shared strings XML.
+    /// 共有文字列のXML
     shared_strings: Arc<Mutex<Xml>>,
-    /// The styles XML.
+    /// スタイルのXML
     styles: Arc<Mutex<Xml>>,
 }
 
 #[pymethods]
 impl Sheet {
-    /// Gets a cell by its address (e.g., "A1").
+    /// アドレス (例: "A1") でセルを取得
     pub fn __getitem__(&self, key: &str) -> Cell {
         Cell::new(
             self.xml.clone(),
@@ -31,7 +31,7 @@ impl Sheet {
         )
     }
 
-    /// Gets a cell by its row and column number.
+    /// 行と列の番号でセルを取得
     #[pyo3(signature = (row, column))]
     pub fn cell(&self, row: usize, column: usize) -> Cell {
         let address = Self::coordinate_to_string(row, column);
@@ -45,7 +45,7 @@ impl Sheet {
 }
 
 impl Sheet {
-    /// Creates a new `Sheet` instance.
+    /// 新しい `Sheet` インスタンスを作成
     pub fn new(
         name: String,
         xml: Arc<Mutex<Xml>>,
@@ -65,7 +65,7 @@ impl Sheet {
         self.xml.clone()
     }
 
-    /// Converts row and column numbers to a cell address string.
+    /// 行と列の番号をセルアドレス文字列に変換
     fn coordinate_to_string(row: usize, col: usize) -> String {
         let mut col_str = String::new();
         let mut col_num = col;

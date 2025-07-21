@@ -1,29 +1,29 @@
 use pyo3::prelude::*;
 
-/// Represents the font properties for a cell.
+/// セルのフォントプロパティを表す
 #[pyclass]
 #[derive(Clone, Debug, PartialEq, Default)]
 pub struct Font {
-    /// The name of the font.
+    /// フォント名
     #[pyo3(get, set)]
     pub name: Option<String>,
-    /// The size of the font.
+    /// フォントサイズ
     #[pyo3(get, set)]
     pub size: Option<f64>,
-    /// Whether the font is bold.
+    /// 太字かどうか
     #[pyo3(get, set)]
     pub bold: Option<bool>,
-    /// Whether the font is italic.
+    /// 斜体かどうか
     #[pyo3(get, set)]
     pub italic: Option<bool>,
-    /// The color of the font in ARGB format (e.g., "FF000000").
+    /// ARGB形式のフォントの色 (例: "FF000000")
     #[pyo3(get, set)]
     pub color: Option<String>,
 }
 
 #[pymethods]
 impl Font {
-    /// Creates a new `Font` instance.
+    /// 新しい `Font` インスタンスを作成
     #[new]
     #[pyo3(signature = (name=None, size=None, bold=None, italic=None, color=None))]
     fn new(
@@ -43,27 +43,27 @@ impl Font {
     }
 }
 
-/// Represents the border properties for a cell.
+/// セルの罫線プロパティを表す
 #[pyclass]
 #[derive(Clone, Debug, PartialEq, Default)]
 pub struct Border {
-    /// The left border.
+    /// 左罫線
     #[pyo3(get, set)]
     pub left: Option<Side>,
-    /// The right border.
+    /// 右罫線
     #[pyo3(get, set)]
     pub right: Option<Side>,
-    /// The top border.
+    /// 上罫線
     #[pyo3(get, set)]
     pub top: Option<Side>,
-    /// The bottom border.
+    /// 下罫線
     #[pyo3(get, set)]
     pub bottom: Option<Side>,
 }
 
 #[pymethods]
 impl Border {
-    /// Creates a new `Border` instance.
+    /// 新しい `Border` インスタンスを作成
     #[new]
     #[pyo3(signature = (left=None, right=None, top=None, bottom=None))]
     fn new(
@@ -81,21 +81,21 @@ impl Border {
     }
 }
 
-/// Represents the properties of a single border side.
+/// 1つの罫線のプロパティを表す
 #[pyclass]
 #[derive(Clone, Debug, PartialEq, Default)]
 pub struct Side {
-    /// The style of the border (e.g., "thin", "medium", "thick").
+    /// 罫線のスタイル (例: "thin", "medium", "thick")
     #[pyo3(get, set)]
     pub style: Option<String>,
-    /// The color of the border in ARGB format.
+    /// ARGB形式の罫線の色
     #[pyo3(get, set)]
     pub color: Option<String>,
 }
 
 #[pymethods]
 impl Side {
-    /// Creates a new `Side` instance.
+    /// 新しい `Side` インスタンスを作成
     #[new]
     #[pyo3(signature = (style=None, color=None))]
     fn new(style: Option<String>, color: Option<String>) -> Self {
@@ -103,24 +103,24 @@ impl Side {
     }
 }
 
-/// Represents the pattern fill properties for a cell.
+/// セルの塗りつぶしパターンプロパティを表す
 #[pyclass]
 #[derive(Clone, Debug, PartialEq, Default)]
 pub struct PatternFill {
-    /// The type of the pattern (e.g., "solid", "gray125").
+    /// パターンの種類 (例: "solid", "gray125")
     #[pyo3(get, set)]
     pub pattern_type: Option<String>,
-    /// The foreground color in ARGB format.
+    /// ARGB形式の前面色
     #[pyo3(get, set)]
     pub fg_color: Option<String>,
-    /// The background color in ARGB format.
+    /// ARGB形式の背景色
     #[pyo3(get, set)]
     pub bg_color: Option<String>,
 }
 
 #[pymethods]
 impl PatternFill {
-    /// Creates a new `PatternFill` instance.
+    /// 新しい `PatternFill` インスタンスを作成
     #[new]
     #[pyo3(signature = (pattern_type=None, fg_color=None, bg_color=None))]
     fn new(
