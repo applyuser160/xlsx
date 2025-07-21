@@ -1,6 +1,6 @@
 use pyo3::prelude::*;
 
-/// セルのフォントプロパティを表す
+/// セルのフォントプロパティ
 #[pyclass]
 #[derive(Clone, Debug, PartialEq, Default)]
 pub struct Font {
@@ -10,10 +10,10 @@ pub struct Font {
     /// フォントサイズ
     #[pyo3(get, set)]
     pub size: Option<f64>,
-    /// 太字かどうか
+    /// 太字
     #[pyo3(get, set)]
     pub bold: Option<bool>,
-    /// 斜体かどうか
+    /// 斜体
     #[pyo3(get, set)]
     pub italic: Option<bool>,
     /// ARGB形式のフォントの色 (例: "FF000000")
@@ -23,7 +23,7 @@ pub struct Font {
 
 #[pymethods]
 impl Font {
-    /// 新しい `Font` インスタンスを作成
+    /// 新しい `Font` インスタンスの作成
     #[new]
     #[pyo3(signature = (name=None, size=None, bold=None, italic=None, color=None))]
     fn new(
@@ -43,7 +43,7 @@ impl Font {
     }
 }
 
-/// セルの罫線プロパティを表す
+/// セルの罫線プロパティ
 #[pyclass]
 #[derive(Clone, Debug, PartialEq, Default)]
 pub struct Border {
@@ -63,7 +63,7 @@ pub struct Border {
 
 #[pymethods]
 impl Border {
-    /// 新しい `Border` インスタンスを作成
+    /// 新しい `Border` インスタンスの作成
     #[new]
     #[pyo3(signature = (left=None, right=None, top=None, bottom=None))]
     fn new(
@@ -81,7 +81,7 @@ impl Border {
     }
 }
 
-/// 1つの罫線のプロパティを表す
+/// 1つの罫線のプロパティ
 #[pyclass]
 #[derive(Clone, Debug, PartialEq, Default)]
 pub struct Side {
@@ -95,7 +95,7 @@ pub struct Side {
 
 #[pymethods]
 impl Side {
-    /// 新しい `Side` インスタンスを作成
+    /// 新しい `Side` インスタンスの作成
     #[new]
     #[pyo3(signature = (style=None, color=None))]
     fn new(style: Option<String>, color: Option<String>) -> Self {
@@ -103,7 +103,7 @@ impl Side {
     }
 }
 
-/// セルの塗りつぶしパターンプロパティを表す
+/// セルの塗りつぶしパターンプロパティ
 #[pyclass]
 #[derive(Clone, Debug, PartialEq, Default)]
 pub struct PatternFill {
@@ -120,7 +120,7 @@ pub struct PatternFill {
 
 #[pymethods]
 impl PatternFill {
-    /// 新しい `PatternFill` インスタンスを作成
+    /// 新しい `PatternFill` インスタンスの作成
     #[new]
     #[pyo3(signature = (pattern_type=None, fg_color=None, bg_color=None))]
     fn new(
