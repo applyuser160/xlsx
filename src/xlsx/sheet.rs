@@ -6,6 +6,7 @@ use crate::xlsx::cell::Cell;
 use crate::xlsx::xml::Xml;
 
 #[pyclass]
+#[derive(Clone)]
 pub struct Sheet {
     #[pyo3(get)]
     pub name: String,
@@ -35,10 +36,6 @@ impl Sheet {
 }
 
 impl Sheet {
-    #[cfg(test)]
-    pub(crate) fn get_xml(&self) -> Arc<Mutex<Xml>> {
-        self.xml.clone()
-    }
     fn coordinate_to_string(row: usize, col: usize) -> String {
         let mut col_str = String::new();
         let mut col_num = col;

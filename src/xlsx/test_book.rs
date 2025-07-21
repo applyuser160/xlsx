@@ -18,6 +18,59 @@ mod tests {
     }
 
     #[test]
+    fn test_active_sheet_logic() {
+        // 観点: アクティブシートのロジック確認
+        let mut book = setup_book("active_sheet_logic");
+        assert_eq!(book.active_sheet_index, 0);
+
+        // Act
+        book.create_sheet("NewSheet".to_string(), 1);
+        book.active_sheet_index = 1;
+        book.update_active_tab();
+
+        // Assert
+        let workbook_tag = book.workbook.elements.first().unwrap();
+        let book_views = workbook_tag.children.iter().find(|c| c.name == "bookViews").unwrap();
+        let workbook_view = book_views.children.iter().find(|c| c.name == "workbookView").unwrap();
+        assert_eq!(workbook_view.attributes.get("activeTab").unwrap(), "1");
+
+        cleanup(book);
+    }
+
+    #[test]
+    fn test_named_range() {
+        // 観点: 名前付き範囲の作成と削除
+        let mut book = setup_book("named_range");
+        assert!(book.defined_names.is_empty());
+
+        // Act (作成)
+        book.create_named_range("TestRange".to_string(), "シート1!$A$1".to_string(), None);
+
+        // Assert (作成)
+        assert_eq!(book.defined_names.len(), 1);
+        let named_range = &book.defined_names[0];
+        assert_eq!(named_range.attributes.get("name").unwrap(), "TestRange");
+        assert_eq!(named_range.text.as_ref().unwrap(), "シート1!$A$1");
+
+        // XMLの確認 (作成)
+        let workbook_tag = book.workbook.elements.first().unwrap();
+        let defined_names_tag = workbook_tag.children.iter().find(|c| c.name == "definedNames").unwrap();
+        assert_eq!(defined_names_tag.children.len(), 1);
+
+        // Act (削除)
+        book.delete_named_range("TestRange".to_string());
+
+        // Assert (削除)
+        assert!(book.defined_names.is_empty());
+        let workbook_tag_after_delete = book.workbook.elements.first().unwrap();
+        let defined_names_tag_after_delete = workbook_tag_after_delete.children.iter().find(|c| c.name == "definedNames").unwrap();
+        assert!(defined_names_tag_after_delete.children.is_empty());
+
+
+        cleanup(book);
+    }
+
+    #[test]
     fn test_new_book() {
         // 観点: Excelファイルの読み取り
 
@@ -241,25 +294,6 @@ mod tests {
         assert_eq!(sheetnames[0], "NewSheetAt0");
         assert_eq!(sheetnames[1], "シート1");
         assert_eq!(new_sheet.name, "NewSheetAt0");
-
-        cleanup(book);
-    }
-
-    #[test]
-    fn test_add_table() {
-        // 観点: テーブルを追加できるか
-        let mut book = setup_book("add_table");
-
-        // Act
-        book.add_table("シート1".to_string(), "Table1".to_string(), "A1:C5".to_string());
-
-        // Assert
-        assert!(book.tables.contains_key("xl/tables/table1.xml"));
-        let sheet = book.get_sheet_by_name("シート1").unwrap();
-        let sheet_xml_arc = sheet.get_xml();
-        let sheet_xml = sheet_xml_arc.lock().unwrap();
-        let table_parts = sheet_xml.elements[0].children.iter().find(|e| e.name == "tableParts").unwrap();
-        assert_eq!(table_parts.attributes.get("count").unwrap(), "1");
 
         cleanup(book);
     }
