@@ -22,7 +22,6 @@ mod test_sheet;
 #[path = "xlsx/test_xml.rs"]
 mod test_xml;
 
-
 use pyo3::prelude::*;
 
 use book::Book;
