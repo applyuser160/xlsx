@@ -2,8 +2,8 @@ use std::sync::{Arc, Mutex};
 
 use pyo3::prelude::*;
 
-use crate::xlsx_module::cell::Cell;
-use crate::xlsx_module::xml::Xml;
+use crate::cell::Cell;
+use crate::xml::Xml;
 
 #[pyclass]
 pub struct Sheet {

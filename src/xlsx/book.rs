@@ -7,8 +7,8 @@ use zip::{ZipArchive, ZipWriter};
 
 use pyo3::prelude::*;
 
-use crate::xlsx_module::sheet::Sheet;
-use crate::xlsx_module::xml::{Xml, XmlElement};
+use crate::sheet::Sheet;
+use crate::xml::{Xml, XmlElement};
 
 const XML_SUFFIX: &str = ".xml";
 const XML_RELS_SUFFIX: &str = ".xml.rels";

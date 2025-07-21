@@ -4,7 +4,7 @@ mod tests {
     use std::io::Read;
     use std::path::Path;
 
-    use crate::xlsx_module::xml::Xml;
+    use crate::xml::Xml;
 
     #[test]
     fn test_xml_read() {
