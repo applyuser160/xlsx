@@ -1,2 +1,0 @@
-[build]
-rustflags = ["-C", "link-arg=-lpython3.12"]
