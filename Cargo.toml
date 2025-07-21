@@ -1,11 +1,11 @@
 [package]
-name = "manage_xlsx"
+name = "xlsx"
 version = "0.0.1"
 edition = "2021"
 
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
 [lib]
-name = "manage_xlsx"
+name = "xlsx"
 crate-type = ["cdylib"]
 
 [dependencies]
@@ -15,3 +15,4 @@ umya-spreadsheet = "2.3.0"
 quick-xml = "0.38"
 serde = { version = "1.0", features = ["derive"] }
 zip = "0.6"
+chrono = "0.4"

@@ -1,6 +1,6 @@
 #[cfg(test)]
 mod tests {
-    use crate::xlsx::book::Book;
+    use crate::book::Book;
     use std::fs;
 
     fn setup_book(test_name: &str) -> Book {
