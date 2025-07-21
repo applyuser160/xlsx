@@ -1,6 +1,6 @@
 use crate::style::{Font, PatternFill};
 use crate::xml::{Xml, XmlElement};
-use chrono::{NaiveDateTime};
+use chrono::NaiveDateTime;
 use pyo3::prelude::*;
 use std::sync::{Arc, Mutex};
 
@@ -89,9 +89,18 @@ impl Cell {
 
     #[setter]
     pub fn set_value(&mut self, value: String) {
+        // 数式かどうかを判定
+        if value.starts_with('=') {
+            self.set_formula_value(&value[1..]);
+        // 日付時刻への変換を試みる
+        } else if let Ok(datetime) = NaiveDateTime::parse_from_str(&value, "%Y-%m-%d %H:%M:%S") {
+            self.set_datetime_value(datetime);
         // 数値への変換を試みる
-        if let Ok(number) = value.parse::<f64>() {
+        } else if let Ok(number) = value.parse::<f64>() {
             self.set_number_value(number);
+        // ブール値への変換を試みる
+        } else if let Ok(boolean) = value.parse::<bool>() {
+            self.set_bool_value(boolean);
         } else {
             self.set_string_value(&value);
         }
@@ -272,7 +281,8 @@ impl Cell {
     pub fn set_number_value(&mut self, value: f64) {
         let mut xml = self.sheet_xml.lock().unwrap();
         let cell_element = self.get_or_create_cell_element(&mut xml);
-        cell_element.attributes.remove("t"); // 文字列型ではないのでt属性を削除
+        cell_element.attributes.remove("t");
+        cell_element.children.retain(|c| c.name != "f");
         if let Some(v) = cell_element.children.iter_mut().find(|c| c.name == "v") {
             v.text = Some(value.to_string());
         } else {
@@ -286,15 +296,51 @@ impl Cell {
         let sst_index = self.get_or_create_shared_string(value);
         let mut xml = self.sheet_xml.lock().unwrap();
         let cell_element = self.get_or_create_cell_element(&mut xml);
-        cell_element
-            .attributes
-            .insert("t".to_string(), "s".to_string());
+        cell_element.attributes.insert("t".to_string(), "s".to_string());
+        cell_element.children.retain(|c| c.name != "f");
         if let Some(v) = cell_element.children.iter_mut().find(|c| c.name == "v") {
             v.text = Some(sst_index.to_string());
         } else {
             let mut v_element = XmlElement::new("v");
             v_element.text = Some(sst_index.to_string());
             cell_element.children.push(v_element);
+        }
+    }
+
+    pub fn set_datetime_value(&mut self, value: NaiveDateTime) {
+        // Based on https://stackoverflow.com/questions/61546133/int-to-datetime-excel
+        let excel_epoch = chrono::NaiveDate::from_ymd_opt(1899, 12, 30).unwrap().and_hms_opt(0,0,0).unwrap();
+        let duration = value.signed_duration_since(excel_epoch);
+        let serial = duration.num_seconds() as f64 / 86400.0;
+        self.set_number_value(serial);
+        // TODO: スタイルで日付フォーマットを設定する
+    }
+
+    pub fn set_bool_value(&mut self, value: bool) {
+        let mut xml = self.sheet_xml.lock().unwrap();
+        let cell_element = self.get_or_create_cell_element(&mut xml);
+        cell_element.attributes.insert("t".to_string(), "b".to_string());
+        cell_element.children.retain(|c| c.name != "f");
+        if let Some(v) = cell_element.children.iter_mut().find(|c| c.name == "v") {
+            v.text = Some((if value { "1" } else { "0" }).to_string());
+        } else {
+            let mut v_element = XmlElement::new("v");
+            v_element.text = Some((if value { "1" } else { "0" }).to_string());
+            cell_element.children.push(v_element);
+        }
+    }
+
+    pub fn set_formula_value(&mut self, formula: &str) {
+        let mut xml = self.sheet_xml.lock().unwrap();
+        let cell_element = self.get_or_create_cell_element(&mut xml);
+        cell_element.attributes.remove("t");
+        cell_element.children.retain(|c| c.name != "v");
+        if let Some(f) = cell_element.children.iter_mut().find(|c| c.name == "f") {
+            f.text = Some(formula.to_string());
+        } else {
+            let mut f_element = XmlElement::new("f");
+            f_element.text = Some(formula.to_string());
+            cell_element.children.push(f_element);
         }
     }
 

@@ -45,7 +45,7 @@ impl Xml {
 }
 
 #[pyclass]
-#[derive(Debug, Clone, PartialEq, Eq)]
+#[derive(Debug, Clone)]
 /// Xmlタグ
 pub struct XmlElement {
     /// タグ名
