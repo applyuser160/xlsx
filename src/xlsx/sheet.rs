@@ -6,6 +6,7 @@ use crate::xlsx::cell::Cell;
 use crate::xlsx::xml::Xml;
 
 #[pyclass]
+#[derive(Clone)]
 pub struct Sheet {
     #[pyo3(get)]
     pub name: String,
