@@ -147,7 +147,7 @@ impl Book {
     </tableColumns>
     <tableStyleInfo name="TableStyleMedium2" showFirstColumn="0" showLastColumn="0" showRowStripes="1" showColumnStripes="0"/>
 </table>"#
-        ));
+        )).unwrap();
         self.tables.insert(table_filename.clone(), new_table_xml);
 
         // ワークシートにテーブルパーツを追加
@@ -186,6 +186,7 @@ impl Book {
 <Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships">
 </Relationships>"#,
             )
+            .unwrap()
         });
 
         if rels.elements.is_empty() {
@@ -300,7 +301,8 @@ impl Book {
             xmlns:r="http://schemas.openxmlformats.org/officeDocument/2006/relationships">
                 <sheetData/>
             </worksheet>"#,
-        );
+        )
+        .unwrap();
 
         // ワークシートをコレクションに追加
         let arc_mutex_xml: Arc<Mutex<Xml>> = Arc::new(Mutex::new(worksheet_xml));
@@ -399,7 +401,7 @@ impl Book {
             // すべてのXMLファイルを新しいzipアーカイブに書き込み
             for (file_name, xml) in &xmls {
                 zip_writer.start_file(file_name, options).unwrap();
-                zip_writer.write_all(&xml.to_buf()).unwrap();
+                zip_writer.write_all(&xml.to_buf().unwrap()).unwrap();
             }
         } else {
             // 既存のファイルをコピーし、変更されたXMLファイルを上書き
@@ -421,7 +423,7 @@ impl Book {
 </Relationships>"#;
         rels.insert(
             "xl/_rels/workbook.xml.rels".to_string(),
-            Xml::new(workbook_rels),
+            Xml::new(workbook_rels).unwrap(),
         );
 
         let workbook_xml = r#"<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
@@ -452,9 +454,9 @@ impl Book {
             sheet_rels: HashMap::new(),
             shared_strings: Arc::new(Mutex::new(Xml::new(
                 r#"<?xml version="1.0" encoding="UTF-8" standalone="yes"?><sst xmlns="http://schemas.openxmlformats.org/spreadsheetml/2006/main" count="0" uniqueCount="0"></sst>"#,
-            ))),
-            styles: Arc::new(Mutex::new(Xml::new(styles_xml))),
-            workbook: Xml::new(workbook_xml),
+            ).unwrap())),
+            styles: Arc::new(Mutex::new(Xml::new(styles_xml).unwrap())),
+            workbook: Xml::new(workbook_xml).unwrap(),
             vba_project: None,
         }
     }
@@ -476,9 +478,9 @@ impl Book {
         let mut themes: HashMap<String, Xml> = HashMap::new();
         let mut worksheets: HashMap<String, Arc<Mutex<Xml>>> = HashMap::new();
         let mut sheet_rels: HashMap<String, Xml> = HashMap::new();
-        let mut shared_strings: Arc<Mutex<Xml>> = Arc::new(Mutex::new(Xml::new("")));
-        let mut styles: Arc<Mutex<Xml>> = Arc::new(Mutex::new(Xml::new("")));
-        let mut workbook: Xml = Xml::new("");
+        let mut shared_strings: Arc<Mutex<Xml>> = Arc::new(Mutex::new(Xml::new("").unwrap()));
+        let mut styles: Arc<Mutex<Xml>> = Arc::new(Mutex::new(Xml::new("").unwrap()));
+        let mut workbook: Xml = Xml::new("").unwrap();
         let mut vba_project: Option<Vec<u8>> = None;
 
         // zipアーカイブからすべてのファイルを読み込み
@@ -490,7 +492,7 @@ impl Book {
                 // XMLファイルを読み込み
                 let mut contents: String = String::new();
                 file.read_to_string(&mut contents).unwrap();
-                let xml = Xml::new(&contents);
+                let xml = Xml::new(&contents).unwrap();
 
                 if name.starts_with(DRAWINGS_PREFIX) {
                     drawings.insert(name, xml);
@@ -516,11 +518,11 @@ impl Book {
                 if name.starts_with(WORKBOOK_RELS_PREFIX) {
                     let mut contents: String = String::new();
                     file.read_to_string(&mut contents).unwrap();
-                    rels.insert(name, Xml::new(&contents));
+                    rels.insert(name, Xml::new(&contents).unwrap());
                 } else if name.starts_with(WORKSHEETS_RELS_PREFIX) {
                     let mut contents: String = String::new();
                     file.read_to_string(&mut contents).unwrap();
-                    sheet_rels.insert(name, Xml::new(&contents));
+                    sheet_rels.insert(name, Xml::new(&contents).unwrap());
                 }
             } else if name == VBA_PROJECT_FILENAME {
                 // VBAプロジェクトを読み込み
@@ -617,7 +619,7 @@ impl Book {
         // 変更されたすべてのXMLファイルを書き込み
         for (file_name, xml) in xmls {
             zip_writer.start_file(file_name, *options).unwrap();
-            zip_writer.write_all(&xml.to_buf()).unwrap();
+            zip_writer.write_all(&xml.to_buf().unwrap()).unwrap();
         }
 
         // VBAプロジェクトが存在する場合は書き込み

@@ -27,21 +27,13 @@ impl Cell {
     #[getter]
     pub fn value(&self) -> Option<String> {
         let xml = self.sheet_xml.lock().unwrap();
-        if let Some(worksheet) = xml.elements.first() {
-            if let Some(sheet_data) = worksheet.children.iter().find(|e| e.name == "sheetData") {
-                for row in &sheet_data.children {
-                    if row.name == "row" {
-                        for cell_element in &row.children {
-                            if cell_element.name == "c" {
-                                if let Some(r_attr) = cell_element.attributes.get("r") {
-                                    if r_attr == &self.address {
-                                        // セル要素から値を取得
-                                        return self.get_value_from_cell_element(cell_element);
-                                    }
-                                }
-                            }
-                        }
-                    }
+        let worksheet = xml.elements.first()?;
+        let sheet_data = worksheet.children.iter().find(|e| e.name == "sheetData")?;
+
+        for row in sheet_data.children.iter().filter(|r| r.name == "row") {
+            for cell_element in row.children.iter().filter(|c| c.name == "c") {
+                if cell_element.attributes.get("r") == Some(&self.address) {
+                    return self.get_value_from_cell_element(cell_element);
                 }
             }
         }
@@ -53,18 +45,23 @@ impl Cell {
     /// 値の型は自動的に検出
     #[setter]
     pub fn set_value(&mut self, value: String) {
-        // 値の型を検出し値を設定
         if let Some(formula) = value.strip_prefix('=') {
             self.set_formula_value(formula);
-        } else if let Ok(datetime) = NaiveDateTime::parse_from_str(&value, "%Y-%m-%d %H:%M:%S") {
-            self.set_datetime_value(datetime);
-        } else if let Ok(number) = value.parse::<f64>() {
-            self.set_number_value(number);
-        } else if let Ok(boolean) = value.parse::<bool>() {
-            self.set_bool_value(boolean);
-        } else {
-            self.set_string_value(&value);
+            return;
         }
+        if let Ok(number) = value.parse::<f64>() {
+            self.set_number_value(number);
+            return;
+        }
+        if let Ok(boolean) = value.parse::<bool>() {
+            self.set_bool_value(boolean);
+            return;
+        }
+        if let Ok(datetime) = NaiveDateTime::parse_from_str(&value, "%Y-%m-%d %H:%M:%S") {
+            self.set_datetime_value(datetime);
+            return;
+        }
+        self.set_string_value(&value);
     }
 
     /// セルのフォントを取得
@@ -185,7 +182,7 @@ impl Cell {
         let fonts_tag = styles_xml.get_mut_or_create_child_by_tag("fonts");
 
         // フォントが既に存在するか確認
-        for (i, f) in fonts_tag.children.iter().enumerate() {
+        if let Some(index) = fonts_tag.children.iter().position(|f| {
             let mut existing_font = Font::default();
             for child in &f.children {
                 match child.name.as_str() {
@@ -200,9 +197,9 @@ impl Cell {
                     _ => {}
                 }
             }
-            if font == &existing_font {
-                return i;
-            }
+            font == &existing_font
+        }) {
+            return index;
         }
 
         // 新しいフォント要素を作成
@@ -221,10 +218,10 @@ impl Cell {
                 .insert("val".to_string(), size.to_string());
             font_element.children.push(size_element);
         }
-        if let Some(true) = font.bold {
+        if font.bold.unwrap_or(false) {
             font_element.children.push(XmlElement::new("b"));
         }
-        if let Some(true) = font.italic {
+        if font.italic.unwrap_or(false) {
             font_element.children.push(XmlElement::new("i"));
         }
         if let Some(color) = &font.color {
@@ -274,6 +271,12 @@ impl Cell {
         }
 
         fill_element.children.push(pattern_fill_element);
+
+        // 同じ塗りつぶしが既に存在するか確認
+        if let Some(index) = fills_tag.children.iter().position(|f| f == &fill_element) {
+            return index;
+        }
+
         fills_tag.children.push(fill_element);
         let count = fills_tag.children.len();
         fills_tag
@@ -294,19 +297,17 @@ impl Cell {
         let cell_xfs_tag = styles_xml.get_mut_or_create_child_by_tag("cellXfs");
 
         // xfが既に存在するか確認
-        for (i, xf) in cell_xfs_tag.children.iter().enumerate() {
-            if xf.attributes.get("fontId") == Some(&font_id.to_string())
+        if let Some(index) = cell_xfs_tag.children.iter().position(|xf| {
+            let has_alignment = xf.children.iter().any(|c| c.name == "alignment");
+            let alignment_check =
+                (alignment_id > 0 && has_alignment) || (alignment_id == 0 && !has_alignment);
+
+            xf.attributes.get("fontId") == Some(&font_id.to_string())
                 && xf.attributes.get("fillId") == Some(&fill_id.to_string())
                 && xf.attributes.get("borderId") == Some(&border_id.to_string())
-            {
-                let has_alignment = xf.children.iter().any(|c| c.name == "alignment");
-                if alignment_id > 0 && has_alignment {
-                    return i;
-                }
-                if alignment_id == 0 && !has_alignment {
-                    return i;
-                }
-            }
+                && alignment_check
+        }) {
+            return index;
         }
 
         // 新しいxf要素を作成
@@ -443,51 +444,42 @@ impl Cell {
         let sheet_data = xml
             .elements
             .first_mut()
-            .unwrap()
-            .children
-            .iter_mut()
-            .find(|e| e.name == "sheetData")
+            .and_then(|ws| ws.children.iter_mut().find(|e| e.name == "sheetData"))
             .unwrap();
 
-        // 行を検索
-        let row_position = sheet_data
+        // 行を検索または作成
+        let row_index =
+            match sheet_data.children.iter().position(|r| {
+                r.name == "row" && r.attributes.get("r") == Some(&row_num.to_string())
+            }) {
+                Some(pos) => pos,
+                None => {
+                    let mut new_row = XmlElement::new("row");
+                    new_row
+                        .attributes
+                        .insert("r".to_string(), row_num.to_string());
+                    sheet_data.children.push(new_row);
+                    sheet_data.children.len() - 1
+                }
+            };
+
+        // セルを検索または作成
+        let cell_index = match sheet_data.children[row_index]
             .children
             .iter()
-            .position(|r| r.name == "row" && r.attributes.get("r") == Some(&row_num.to_string()));
-
-        // 行が存在しない場合は作成
-        let row_index = match row_position {
-            Some(pos) => pos,
-            None => {
-                let mut new_row = XmlElement::new("row");
-                new_row
-                    .attributes
-                    .insert("r".to_string(), row_num.to_string());
-                sheet_data.children.push(new_row);
-                sheet_data.children.len() - 1
-            }
-        };
-        let row_element = &mut sheet_data.children[row_index];
-
-        // セルを検索
-        let cell_position = row_element
-            .children
-            .iter()
-            .position(|c| c.name == "c" && c.attributes.get("r") == Some(&self.address));
-
-        // セルが存在しない場合は作成
-        let cell_index = match cell_position {
+            .position(|c| c.name == "c" && c.attributes.get("r") == Some(&self.address))
+        {
             Some(pos) => pos,
             None => {
                 let mut new_cell = XmlElement::new("c");
                 new_cell
                     .attributes
                     .insert("r".to_string(), self.address.clone());
-                row_element.children.push(new_cell);
-                row_element.children.len() - 1
+                sheet_data.children[row_index].children.push(new_cell);
+                sheet_data.children[row_index].children.len() - 1
             }
         };
-        &mut row_element.children[cell_index]
+        &mut sheet_data.children[row_index].children[cell_index]
     }
 
     /// 共有文字列XML内の共有文字列を取得または作成
