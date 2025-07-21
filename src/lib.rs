@@ -36,8 +36,8 @@ pub fn hello_from_bin() -> String {
 }
 
 #[pyfunction]
-pub fn load_workbook(path: String) -> Book {
-    Book::new(&path)
+pub fn load_workbook(path: String) -> PyResult<Book> {
+    Book::from_path(&path)
 }
 
 #[pymodule]

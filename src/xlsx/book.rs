@@ -87,20 +87,89 @@ pub struct Book {
 
 #[pymethods]
 impl Book {
-    /// 新しい `Book` インスタンスを作成
-    ///
-    /// パスが指定されている場合は、ファイルからワークブックを読み込み
-    /// それ以外の場合は、新しいワークブックを作成
+    /// 新しい空の `Book` インスタンスを作成
     #[new]
-    #[pyo3(signature = (path = ""))]
-    pub fn new(path: &str) -> Self {
-        if path.is_empty() {
-            // 新しいワークブックを作成
-            Self::new_workbook()
-        } else {
-            // ファイルからワークブックを読み込み
-            Self::from_file(path)
+    pub fn new() -> Self {
+        Self::new_workbook()
+    }
+
+    /// パスから `Book` インスタンスを作成
+    #[staticmethod]
+    pub fn from_path(path: &str) -> PyResult<Self> {
+        let file = File::open(path)?;
+        let mut archive = ZipArchive::new(file).map_err(|e| pyo3::exceptions::PyIOError::new_err(e.to_string()))?;
+
+        let mut rels: HashMap<String, Xml> = HashMap::new();
+        let mut drawings: HashMap<String, Xml> = HashMap::new();
+        let mut tables: HashMap<String, Xml> = HashMap::new();
+        let mut pivot_tables: HashMap<String, Xml> = HashMap::new();
+        let mut pivot_caches: HashMap<String, Xml> = HashMap::new();
+        let mut themes: HashMap<String, Xml> = HashMap::new();
+        let mut worksheets: HashMap<String, Arc<Mutex<Xml>>> = HashMap::new();
+        let mut sheet_rels: HashMap<String, Xml> = HashMap::new();
+        let mut shared_strings: Arc<Mutex<Xml>> = Arc::new(Mutex::new(Xml::new("")));
+        let mut styles: Arc<Mutex<Xml>> = Arc::new(Mutex::new(Xml::new("")));
+        let mut workbook: Xml = Xml::new("");
+        let mut vba_project: Option<Vec<u8>> = None;
+
+        // zipアーカイブからすべてのファイルを読み込み
+        for name in archive.file_names().map(|s| s.to_string()).collect::<Vec<String>>() {
+            let mut file = archive.by_name(&name).map_err(|e| pyo3::exceptions::PyIOError::new_err(e.to_string()))?;
+            match name.as_str() {
+                // XML ファイル
+                name if name.ends_with(XML_SUFFIX) => {
+                    let mut contents = String::new();
+                    file.read_to_string(&mut contents)?;
+                    let xml = Xml::new(&contents);
+                    match name {
+                        s if s.starts_with(DRAWINGS_PREFIX) => { drawings.insert(s.to_string(), xml); }
+                        s if s.starts_with(TABLES_PREFIX) => { tables.insert(s.to_string(), xml); }
+                        s if s.starts_with(PIVOT_TABLES_PREFIX) => { pivot_tables.insert(s.to_string(), xml); }
+                        s if s.starts_with(PIVOT_CACHES_PREFIX) => { pivot_caches.insert(s.to_string(), xml); }
+                        s if s.starts_with(THEME_PREFIX) => { themes.insert(s.to_string(), xml); }
+                        s if s.starts_with(WORKSHEETS_PREFIX) => { worksheets.insert(s.to_string(), Arc::new(Mutex::new(xml))); }
+                        s if s == WORKBOOK_FILENAME => { workbook = xml; }
+                        s if s == STYLES_FILENAME => { styles = Arc::new(Mutex::new(xml)); }
+                        s if s == SHARED_STRINGS_FILENAME => { shared_strings = Arc::new(Mutex::new(xml)); }
+                        _ => {}
+                    }
+                }
+                // リレーションシップファイル
+                name if name.ends_with(XML_RELS_SUFFIX) => {
+                    let mut contents = String::new();
+                    file.read_to_string(&mut contents)?;
+                    let xml = Xml::new(&contents);
+                    match name {
+                        s if s.starts_with(WORKBOOK_RELS_PREFIX) => { rels.insert(s.to_string(), xml); }
+                        s if s.starts_with(WORKSHEETS_RELS_PREFIX) => { sheet_rels.insert(s.to_string(), xml); }
+                        _ => {}
+                    }
+                }
+                // VBAプロジェクト
+                VBA_PROJECT_FILENAME => {
+                    let mut contents = Vec::new();
+                    file.read_to_end(&mut contents)?;
+                    vba_project = Some(contents);
+                }
+                _ => {}
+            }
         }
+
+        Ok(Book {
+            path: path.to_string(),
+            rels,
+            drawings,
+            tables,
+            pivot_tables,
+            pivot_caches,
+            themes,
+            worksheets,
+            sheet_rels,
+            shared_strings,
+            styles,
+            workbook,
+            vba_project,
+        })
     }
 
     /// ワークブック内のすべてのシートの名前を取得
@@ -118,16 +187,14 @@ impl Book {
     }
 
     /// 指定された名前のシートがワークブックに存在するかどうかを確認
-    pub fn __contains__(&self, key: String) -> bool {
-        self.sheetnames().contains(&key)
+    pub fn __contains__(&self, key: &str) -> bool {
+        self.sheetnames().iter().any(|s| s == key)
     }
 
     /// 名前でシートを取得
-    pub fn __getitem__(&self, key: String) -> Sheet {
-        if let Some(sheet) = self.get_sheet_by_name(key.as_str()) {
-            return sheet;
-        }
-        panic!("No sheet named '{key}'");
+    pub fn __getitem__(&self, key: &str) -> PyResult<Sheet> {
+        self.get_sheet_by_name(key)
+            .ok_or_else(|| PyErr::new::<pyo3::exceptions::PyKeyError, _>(key.to_string()))
     }
 
     /// ワークシートにテーブルを追加
@@ -219,12 +286,15 @@ impl Book {
     }
 
     /// 名前でシートを削除
-    pub fn __delitem__(&mut self, key: String) {
-        if let Some(sheet) = self.get_sheet_by_name(key.as_str()) {
+    pub fn __delitem__(&mut self, key: &str) -> PyResult<()> {
+        if let Some(sheet) = self.get_sheet_by_name(key) {
             self.remove(&sheet);
-            return;
+            Ok(())
+        } else {
+            Err(PyErr::new::<pyo3::exceptions::PyKeyError, _>(
+                key.to_string(),
+            ))
         }
-        panic!("No sheet named '{key}'");
     }
 
     /// シートのインデックスを取得
@@ -239,10 +309,9 @@ impl Book {
 
     /// ワークブックからシートを削除
     pub fn remove(&mut self, sheet: &Sheet) {
-        let sheet_paths = self.get_sheet_paths();
-        if let Some(sheet_path) = sheet_paths.get(&sheet.name) {
-            if self.worksheets.contains_key(sheet_path) {
-                self.worksheets.remove(sheet_path);
+        if let Some(sheet_path) = self.get_sheet_paths().get(&sheet.name).cloned() {
+            if self.worksheets.contains_key(&sheet_path) {
+                self.worksheets.remove(&sheet_path);
 
                 // workbook.xmlからsheetタグを削除し、r:idを取得
                 let mut rid_to_remove = String::new();
@@ -456,94 +525,6 @@ impl Book {
             styles: Arc::new(Mutex::new(Xml::new(styles_xml))),
             workbook: Xml::new(workbook_xml),
             vba_project: None,
-        }
-    }
-
-    /// ファイルからワークブックを読み込み
-    fn from_file(path: &str) -> Self {
-        let file_result: Result<File, std::io::Error> = File::open(path);
-        if file_result.is_err() {
-            panic!("File not found: {path}");
-        }
-        let file = file_result.unwrap();
-        let mut archive: ZipArchive<File> = ZipArchive::new(file).unwrap();
-
-        let mut rels: HashMap<String, Xml> = HashMap::new();
-        let mut drawings: HashMap<String, Xml> = HashMap::new();
-        let mut tables: HashMap<String, Xml> = HashMap::new();
-        let mut pivot_tables: HashMap<String, Xml> = HashMap::new();
-        let mut pivot_caches: HashMap<String, Xml> = HashMap::new();
-        let mut themes: HashMap<String, Xml> = HashMap::new();
-        let mut worksheets: HashMap<String, Arc<Mutex<Xml>>> = HashMap::new();
-        let mut sheet_rels: HashMap<String, Xml> = HashMap::new();
-        let mut shared_strings: Arc<Mutex<Xml>> = Arc::new(Mutex::new(Xml::new("")));
-        let mut styles: Arc<Mutex<Xml>> = Arc::new(Mutex::new(Xml::new("")));
-        let mut workbook: Xml = Xml::new("");
-        let mut vba_project: Option<Vec<u8>> = None;
-
-        // zipアーカイブからすべてのファイルを読み込み
-        for i in 0..archive.len() {
-            let mut file: zip::read::ZipFile<'_> = archive.by_index(i).unwrap();
-            let name: String = file.name().to_string();
-
-            if name.ends_with(XML_SUFFIX) {
-                // XMLファイルを読み込み
-                let mut contents: String = String::new();
-                file.read_to_string(&mut contents).unwrap();
-                let xml = Xml::new(&contents);
-
-                if name.starts_with(DRAWINGS_PREFIX) {
-                    drawings.insert(name, xml);
-                } else if name.starts_with(TABLES_PREFIX) {
-                    tables.insert(name, xml);
-                } else if name.starts_with(PIVOT_TABLES_PREFIX) {
-                    pivot_tables.insert(name, xml);
-                } else if name.starts_with(PIVOT_CACHES_PREFIX) {
-                    pivot_caches.insert(name, xml);
-                } else if name.starts_with(THEME_PREFIX) {
-                    themes.insert(name, xml);
-                } else if name.starts_with(WORKSHEETS_PREFIX) {
-                    worksheets.insert(name, Arc::new(Mutex::new(xml)));
-                } else if name == WORKBOOK_FILENAME {
-                    workbook = xml;
-                } else if name == STYLES_FILENAME {
-                    styles = Arc::new(Mutex::new(xml));
-                } else if name == SHARED_STRINGS_FILENAME {
-                    shared_strings = Arc::new(Mutex::new(xml));
-                }
-            } else if name.ends_with(XML_RELS_SUFFIX) {
-                // リレーションシップファイルを読み込み
-                if name.starts_with(WORKBOOK_RELS_PREFIX) {
-                    let mut contents: String = String::new();
-                    file.read_to_string(&mut contents).unwrap();
-                    rels.insert(name, Xml::new(&contents));
-                } else if name.starts_with(WORKSHEETS_RELS_PREFIX) {
-                    let mut contents: String = String::new();
-                    file.read_to_string(&mut contents).unwrap();
-                    sheet_rels.insert(name, Xml::new(&contents));
-                }
-            } else if name == VBA_PROJECT_FILENAME {
-                // VBAプロジェクトを読み込み
-                let mut contents: Vec<u8> = Vec::new();
-                file.read_to_end(&mut contents).unwrap();
-                vba_project = Some(contents);
-            }
-        }
-
-        Book {
-            path: path.to_string(),
-            rels,
-            drawings,
-            tables,
-            pivot_tables,
-            pivot_caches,
-            themes,
-            worksheets,
-            sheet_rels,
-            shared_strings,
-            styles,
-            workbook,
-            vba_project,
         }
     }
 
