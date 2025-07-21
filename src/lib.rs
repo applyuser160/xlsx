@@ -2,6 +2,7 @@ mod xlsx {
     pub mod book;
     pub mod cell;
     pub mod sheet;
+    pub mod style;
     pub mod test_book;
     pub mod test_cell;
     pub mod test_sheet;
@@ -14,6 +15,7 @@ use pyo3::prelude::*;
 use xlsx::book::Book;
 use xlsx::cell::Cell;
 use xlsx::sheet::Sheet;
+use xlsx::style::{Font, PatternFill};
 use xlsx::xml::{Xml, XmlElement};
 
 #[pyfunction]
@@ -31,18 +33,20 @@ pub fn hello_from_bin() -> String {
 // }
 
 #[pyfunction]
-pub fn load_workbook(path: String) -> Book {
+pub fn load_workbook(path: &str) -> Book {
     Book::new(path)
 }
 
 #[pymodule]
-pub fn _core(m: &Bound<'_, PyModule>) -> PyResult<()> {
+fn manage_xlsx(m: &Bound<'_, PyModule>) -> PyResult<()> {
     m.add_function(wrap_pyfunction!(hello_from_bin, m)?)?;
     // m.add_function(wrap_pyfunction!(read_file, m)?)?;
     m.add_function(wrap_pyfunction!(load_workbook, m)?)?;
     m.add_class::<Book>()?;
     m.add_class::<Sheet>()?;
     m.add_class::<Cell>()?;
+    m.add_class::<Font>()?;
+    m.add_class::<PatternFill>()?;
     m.add_class::<Xml>()?;
     m.add_class::<XmlElement>()?;
     Ok(())

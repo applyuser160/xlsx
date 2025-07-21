@@ -29,6 +29,21 @@ impl XmlElement {
     }
 }
 
+impl Xml {
+    pub fn get_mut_or_create_child_by_tag(&mut self, tag_name: &str) -> &mut XmlElement {
+        let style_sheet = self.elements.first_mut().unwrap();
+        let position = style_sheet.children.iter().position(|c| c.name == tag_name);
+        match position {
+            Some(pos) => &mut style_sheet.children[pos],
+            None => {
+                let new_element = XmlElement::new(tag_name);
+                style_sheet.children.push(new_element);
+                style_sheet.children.last_mut().unwrap()
+            }
+        }
+    }
+}
+
 #[pyclass]
 #[derive(Debug, Clone)]
 /// Xmlタグ

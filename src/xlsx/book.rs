@@ -45,7 +45,7 @@ pub struct Book {
     pub shared_strings: Arc<Mutex<Xml>>,
 
     /// `xl/styles.xml`
-    pub styles: Xml,
+    pub styles: Arc<Mutex<Xml>>,
 
     /// `workbook.xml`
     pub workbook: Xml,
@@ -54,9 +54,48 @@ pub struct Book {
 #[pymethods]
 impl Book {
     #[new]
-    #[pyo3(signature = (path=INIT_EXCEL_FILENAME.to_string()))]
-    pub fn new(path: String) -> Self {
-        let file_result: Result<File, std::io::Error> = File::open(&path);
+    #[pyo3(signature = (path = ""))]
+    pub fn new(path: &str) -> Self {
+        if path.is_empty() {
+            // New workbook
+            let mut rels: HashMap<String, Xml> = HashMap::new();
+            let workbook_rels = r#"<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
+<Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships">
+</Relationships>"#;
+            rels.insert(
+                "xl/_rels/workbook.xml.rels".to_string(),
+                Xml::new(&workbook_rels.to_string()),
+            );
+
+            let workbook_xml = r#"<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
+<workbook xmlns="http://schemas.openxmlformats.org/spreadsheetml/2006/main" xmlns:r="http://schemas.openxmlformats.org/officeDocument/2006/relationships">
+<sheets>
+</sheets>
+</workbook>"#;
+
+            let styles_xml = r#"<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
+<styleSheet xmlns="http://schemas.openxmlformats.org/spreadsheetml/2006/main">
+<fonts count="1"><font><sz val="11"/><color theme="1"/><name val="Calibri"/></font></fonts>
+<fills count="2"><fill><patternFill patternType="none"/></fill><fill><patternFill patternType="gray125"/></fill></fills>
+<borders count="1"><border><left/><right/><top/><bottom/><diagonal/></border></borders>
+<cellStyleXfs count="1"><xf numFmtId="0" fontId="0" fillId="0" borderId="0"/></cellStyleXfs>
+<cellXfs count="1"><xf numFmtId="0" fontId="0" fillId="0" borderId="0" xfId="0"/></cellXfs>
+<cellStyles count="1"><cellStyle name="Normal" xfId="0" builtinId="0"/></cellStyles>
+</styleSheet>"#;
+
+            Book {
+                path: "".to_string(),
+                rels,
+                drawings: HashMap::new(),
+                themes: HashMap::new(),
+                worksheets: HashMap::new(),
+                shared_strings: Arc::new(Mutex::new(Xml::new(
+                    &r#"<?xml version="1.0" encoding="UTF-8" standalone="yes"?><sst xmlns="http://schemas.openxmlformats.org/spreadsheetml/2006/main" count="0" uniqueCount="0"></sst>"#.to_string()))),
+                styles: Arc::new(Mutex::new(Xml::new(&styles_xml.to_string()))),
+                workbook: Xml::new(&workbook_xml.to_string()),
+            }
+        } else {
+            let file_result: Result<File, std::io::Error> = File::open(path);
         if file_result.is_err() {
             panic!("File not found: {path}");
         }
@@ -68,7 +107,7 @@ impl Book {
         let mut themes: HashMap<String, Xml> = HashMap::new();
         let mut worksheets: HashMap<String, Arc<Mutex<Xml>>> = HashMap::new();
         let mut shared_strings: Arc<Mutex<Xml>> = Arc::new(Mutex::new(Xml::new(&String::new())));
-        let mut styles: Xml = Xml::new(&String::new());
+        let mut styles: Arc<Mutex<Xml>> = Arc::new(Mutex::new(Xml::new(&String::new())));
         let mut workbook: Xml = Xml::new(&String::new());
 
         for i in 0..archive.len() {
@@ -89,7 +128,7 @@ impl Book {
                 } else if name == WORKBOOK_FILENAME {
                     workbook = xml;
                 } else if name == STYLES_FILENAME {
-                    styles = xml;
+                    styles = Arc::new(Mutex::new(xml));
                 } else if name == SHARED_STRINGS_FILENAME {
                     shared_strings = Arc::new(Mutex::new(xml));
                 }
@@ -101,7 +140,7 @@ impl Book {
         }
 
         Book {
-            path,
+            path: path.to_string(),
             rels,
             drawings,
             themes,
@@ -111,6 +150,7 @@ impl Book {
             workbook,
         }
     }
+}
 
     #[getter]
     pub fn sheetnames(&self) -> Vec<String> {
@@ -287,13 +327,15 @@ impl Book {
         }
 
         // Sheetオブジェクトを作成して返す
-        Sheet::new(title, arc_mutex_xml, self.shared_strings.clone())
+        Sheet::new(
+            title,
+            arc_mutex_xml,
+            self.shared_strings.clone(),
+            self.styles.clone(),
+        )
     }
 
     pub fn copy(&self, path: &str) {
-        let file: File = File::open(&self.path).unwrap();
-        let mut archive: ZipArchive<File> = ZipArchive::new(file).unwrap();
-
         // 新しいファイルを作成
         let new_file: File = OpenOptions::new()
             .write(true)
@@ -301,17 +343,22 @@ impl Book {
             .truncate(true)
             .open(path)
             .unwrap();
-
         let mut zip_writer: ZipWriter<File> = ZipWriter::new(new_file);
         let options: FileOptions =
             FileOptions::default().compression_method(zip::CompressionMethod::Stored);
-
-        // 構造体内のxmlを集合
         let xmls: HashMap<String, Xml> = self.merge_xmls();
 
-        Book::write_file(&mut archive, &xmls, &mut zip_writer, &options);
+        if self.path.is_empty() {
+            for (file_name, xml) in &xmls {
+                zip_writer.start_file(file_name, options).unwrap();
+                zip_writer.write_all(&xml.to_buf()).unwrap();
+            }
+        } else {
+            let file = File::open(&self.path).unwrap();
+            let mut archive = ZipArchive::new(file).unwrap();
+            Book::write_file(&mut archive, &xmls, &mut zip_writer, &options);
+        }
 
-        // ファイルを閉じる（ZipWriterのdropで自動的に行われるが、明示的にfinishを呼ぶ）
         zip_writer.finish().unwrap();
     }
 }
@@ -336,7 +383,10 @@ impl Book {
     pub fn merge_xmls(&self) -> HashMap<String, Xml> {
         let mut xmls: HashMap<String, Xml> = self.rels.clone();
         xmls.insert(WORKBOOK_FILENAME.to_string(), self.workbook.clone());
-        xmls.insert(STYLES_FILENAME.to_string(), self.styles.clone());
+        xmls.insert(
+            STYLES_FILENAME.to_string(),
+            self.styles.lock().unwrap().clone(),
+        );
         xmls.insert(
             SHARED_STRINGS_FILENAME.to_string(),
             self.shared_strings.lock().unwrap().clone(),
@@ -434,6 +484,7 @@ impl Book {
                     name.to_string(),
                     xml.clone(),
                     self.shared_strings.clone(),
+                    self.styles.clone(),
                 ));
             }
         }

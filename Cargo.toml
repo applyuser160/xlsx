@@ -1,11 +1,11 @@
 [package]
-name = "xlsx"
+name = "manage_xlsx"
 version = "0.0.1"
 edition = "2021"
 
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
 [lib]
-name = "xlsx"
+name = "manage_xlsx"
 crate-type = ["cdylib"]
 
 [dependencies]

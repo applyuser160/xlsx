@@ -11,6 +11,7 @@ pub struct Sheet {
     pub name: String,
     xml: Arc<Mutex<Xml>>,
     shared_strings: Arc<Mutex<Xml>>,
+    styles: Arc<Mutex<Xml>>,
 }
 
 #[pymethods]
@@ -23,6 +24,7 @@ impl Sheet {
         Cell::new(
             self.xml.clone(),
             self.shared_strings.clone(),
+            self.styles.clone(),
             key.to_string(),
         )
     }
@@ -30,7 +32,12 @@ impl Sheet {
     #[pyo3(signature = (row, column))]
     pub fn cell(&self, row: usize, column: usize) -> Cell {
         let address = Self::coordinate_to_string(row, column);
-        Cell::new(self.xml.clone(), self.shared_strings.clone(), address)
+        Cell::new(
+            self.xml.clone(),
+            self.shared_strings.clone(),
+            self.styles.clone(),
+            address,
+        )
     }
 }
 
@@ -46,11 +53,17 @@ impl Sheet {
         format!("{col_str}{row}")
     }
 
-    pub fn new(name: String, xml: Arc<Mutex<Xml>>, shared_strings: Arc<Mutex<Xml>>) -> Self {
+    pub fn new(
+        name: String,
+        xml: Arc<Mutex<Xml>>,
+        shared_strings: Arc<Mutex<Xml>>,
+        styles: Arc<Mutex<Xml>>,
+    ) -> Self {
         Sheet {
             name,
             xml,
             shared_strings,
+            styles,
         }
     }
 

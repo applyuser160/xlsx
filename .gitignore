@@ -21,6 +21,7 @@ Cargo.lock
 #.idea/
 
 .env/
+.venv/
 
 **/*.pyc
 **/__pycache__/
