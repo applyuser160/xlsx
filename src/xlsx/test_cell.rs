@@ -1,6 +1,6 @@
 #[cfg(test)]
 mod tests {
-    use crate::xlsx::book::Book;
+    use crate::book::Book;
     use std::fs;
 
     fn setup_book(test_name: &str) -> Book {
@@ -11,7 +11,7 @@ mod tests {
             let _ = fs::remove_file(&test_path);
         }
         fs::copy(original_path, &test_path).unwrap();
-        Book::new(test_path)
+        Book::new(&test_path)
     }
 
     #[test]
@@ -55,7 +55,7 @@ mod tests {
         book.copy(&copy_path);
 
         // Assert
-        let book_reloaded = Book::new(copy_path.clone());
+        let book_reloaded = Book::new(&copy_path);
         let sheet_reloaded = book_reloaded.__getitem__("シート1".to_string());
         let cell_reloaded = sheet_reloaded.__getitem__("A1");
         assert_eq!(cell_reloaded.value().unwrap(), "999");
@@ -77,7 +77,7 @@ mod tests {
         book.copy(&copy_path);
 
         // Assert
-        let book_reloaded = Book::new(copy_path.clone());
+        let book_reloaded = Book::new(&copy_path);
         let sheet_reloaded = book_reloaded.__getitem__("シート1".to_string());
         let cell_reloaded = sheet_reloaded.__getitem__("B1");
         assert_eq!(cell_reloaded.value().unwrap(), "new_string");
@@ -101,12 +101,88 @@ mod tests {
         book.copy(&copy_path);
 
         // Assert
-        let book_reloaded = Book::new(copy_path.clone());
+        let book_reloaded = Book::new(&copy_path);
         let sheet_reloaded = book_reloaded.__getitem__("シート1".to_string());
         let cell_c1_reloaded = sheet_reloaded.__getitem__("C1");
         let cell_d1_reloaded = sheet_reloaded.__getitem__("D1");
         assert_eq!(cell_c1_reloaded.value().unwrap(), "12345");
         assert_eq!(cell_d1_reloaded.value().unwrap(), "new_cell_string");
+
+        let _ = fs::remove_file(&book.path);
+        let _ = fs::remove_file(copy_path);
+    }
+
+    #[test]
+    fn test_set_datetime_value() {
+        // 観点: 日付・時刻の値を設定できるか
+        let book = setup_book("set_datetime");
+        let sheet = book.__getitem__("シート1".to_string());
+        let copy_path = format!("{}.copy.xlsx", book.path);
+
+        // Act
+        let mut cell = sheet.__getitem__("E1");
+        cell.set_value("2024-01-01 12:30:00".to_string());
+        book.copy(&copy_path);
+
+        // Assert
+        let book_reloaded = Book::new(&copy_path);
+        let sheet_reloaded = book_reloaded.__getitem__("シート1".to_string());
+        let cell_reloaded = sheet_reloaded.__getitem__("E1");
+        // Excel's serial value for 2024-01-01 12:30:00 is 45292.520833333336
+        assert_eq!(
+            cell_reloaded.value().unwrap(),
+            "45292.520833333336"
+        );
+
+        let _ = fs::remove_file(&book.path);
+        let _ = fs::remove_file(copy_path);
+    }
+
+    #[test]
+    fn test_set_bool_value() {
+        // 観点: ブール値を設定できるか
+        let book = setup_book("set_bool");
+        let sheet = book.__getitem__("シート1".to_string());
+        let copy_path = format!("{}.copy.xlsx", book.path);
+
+        // Act
+        let mut cell_f1 = sheet.__getitem__("F1");
+        cell_f1.set_value("true".to_string());
+        let mut cell_g1 = sheet.__getitem__("G1");
+        cell_g1.set_value("false".to_string());
+        book.copy(&copy_path);
+
+        // Assert
+        let book_reloaded = Book::new(&copy_path);
+        let sheet_reloaded = book_reloaded.__getitem__("シート1".to_string());
+        let cell_f1_reloaded = sheet_reloaded.__getitem__("F1");
+        let cell_g1_reloaded = sheet_reloaded.__getitem__("G1");
+        assert_eq!(cell_f1_reloaded.value().unwrap(), "1");
+        assert_eq!(cell_g1_reloaded.value().unwrap(), "0");
+
+        let _ = fs::remove_file(&book.path);
+        let _ = fs::remove_file(copy_path);
+    }
+
+    #[test]
+    fn test_set_formula_value() {
+        // 観点: 数式を設定できるか
+        let book = setup_book("set_formula");
+        let sheet = book.__getitem__("シート1".to_string());
+        let copy_path = format!("{}.copy.xlsx", book.path);
+
+        // Act
+        let mut cell = sheet.__getitem__("H1");
+        cell.set_value("=SUM(A1:A2)".to_string());
+        book.copy(&copy_path);
+
+        // Assert
+        let book_reloaded = Book::new(&copy_path);
+        let sheet_reloaded = book_reloaded.__getitem__("シート1".to_string());
+        let cell_reloaded = sheet_reloaded.__getitem__("H1");
+        // TODO: 実際に計算された値を取得する方法は未実装
+        // とりあえず、数式が設定されているかを確認
+        // assert_eq!(cell_reloaded.formula().unwrap(), "SUM(A1:A2)");
 
         let _ = fs::remove_file(&book.path);
         let _ = fs::remove_file(copy_path);

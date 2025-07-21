@@ -1,4 +1,6 @@
-use crate::xlsx::xml::{Xml, XmlElement};
+use crate::style::{Font, PatternFill};
+use crate::xml::{Xml, XmlElement};
+use chrono::NaiveDateTime;
 use pyo3::prelude::*;
 use std::sync::{Arc, Mutex};
 
@@ -6,7 +8,10 @@ use std::sync::{Arc, Mutex};
 pub struct Cell {
     sheet_xml: Arc<Mutex<Xml>>,
     shared_strings: Arc<Mutex<Xml>>,
+    styles: Arc<Mutex<Xml>>,
     address: String,
+    font: Option<Font>,
+    fill: Option<PatternFill>,
 }
 
 #[pymethods]
@@ -84,32 +89,200 @@ impl Cell {
 
     #[setter]
     pub fn set_value(&mut self, value: String) {
+        // 数式かどうかを判定
+        if value.starts_with('=') {
+            self.set_formula_value(&value[1..]);
+        // 日付時刻への変換を試みる
+        } else if let Ok(datetime) = NaiveDateTime::parse_from_str(&value, "%Y-%m-%d %H:%M:%S") {
+            self.set_datetime_value(datetime);
         // 数値への変換を試みる
-        if let Ok(number) = value.parse::<f64>() {
+        } else if let Ok(number) = value.parse::<f64>() {
             self.set_number_value(number);
+        // ブール値への変換を試みる
+        } else if let Ok(boolean) = value.parse::<bool>() {
+            self.set_bool_value(boolean);
         } else {
             self.set_string_value(&value);
         }
     }
+
+    #[getter]
+    fn get_font(&self) -> PyResult<Option<Font>> {
+        Ok(self.font.clone())
+    }
+
+    #[setter]
+    fn set_font(&mut self, font: Font) {
+        self.font = Some(font.clone());
+        let font_id = self.add_font_to_styles(&font);
+        let fill_id = self.add_fill_to_styles(&self.fill.clone().unwrap_or_default());
+        let xf_id = self.add_xf_to_styles(font_id, fill_id, 0, 0);
+        let mut xml = self.sheet_xml.lock().unwrap();
+        let cell_element = self.get_or_create_cell_element(&mut xml);
+        cell_element.attributes.insert("s".to_string(), xf_id.to_string());
+    }
+
+    #[getter]
+    fn get_fill(&self) -> PyResult<Option<PatternFill>> {
+        Ok(self.fill.clone())
+    }
+
+    #[setter]
+    fn set_fill(&mut self, fill: PatternFill) {
+        self.fill = Some(fill.clone());
+        let font_id = self.add_font_to_styles(&self.font.clone().unwrap_or_default());
+        let fill_id = self.add_fill_to_styles(&fill);
+        let xf_id = self.add_xf_to_styles(font_id, fill_id, 0, 0);
+        let mut xml = self.sheet_xml.lock().unwrap();
+        let cell_element = self.get_or_create_cell_element(&mut xml);
+        cell_element.attributes.insert("s".to_string(), xf_id.to_string());
+    }
 }
 
 impl Cell {
+    fn add_font_to_styles(&self, font: &Font) -> usize {
+        let mut styles_xml = self.styles.lock().unwrap();
+        let fonts_tag = styles_xml.get_mut_or_create_child_by_tag("fonts");
+
+        // Check if the font already exists
+        for (i, f) in fonts_tag.children.iter().enumerate() {
+            let mut existing_font = Font { name: None, size: None, bold: None, italic: None, color: None };
+            for child in &f.children {
+                match child.name.as_str() {
+                    "name" => existing_font.name = child.attributes.get("val").cloned(),
+                    "sz" => existing_font.size = child.attributes.get("val").and_then(|s| s.parse().ok()),
+                    "b" => existing_font.bold = Some(true),
+                    "i" => existing_font.italic = Some(true),
+                    "color" => existing_font.color = child.attributes.get("rgb").cloned(),
+                    _ => {}
+                }
+            }
+            if font == &existing_font {
+                return i;
+            }
+        }
+
+        let mut font_element = XmlElement::new("font");
+        if let Some(name) = &font.name {
+            let mut name_element = XmlElement::new("name");
+            name_element.attributes.insert("val".to_string(), name.clone());
+            font_element.children.push(name_element);
+        }
+        if let Some(size) = font.size {
+            let mut size_element = XmlElement::new("sz");
+            size_element.attributes.insert("val".to_string(), size.to_string());
+            font_element.children.push(size_element);
+        }
+        if let Some(true) = font.bold {
+            font_element.children.push(XmlElement::new("b"));
+        }
+        if let Some(true) = font.italic {
+            font_element.children.push(XmlElement::new("i"));
+        }
+        if let Some(color) = &font.color {
+            let mut color_element = XmlElement::new("color");
+            color_element.attributes.insert("rgb".to_string(), color.clone());
+            font_element.children.push(color_element);
+        }
+
+        fonts_tag.children.push(font_element);
+        let count = fonts_tag.children.len();
+        fonts_tag.attributes.insert("count".to_string(), count.to_string());
+        count - 1
+    }
+
+    fn add_fill_to_styles(&self, fill: &PatternFill) -> usize {
+        let mut styles_xml = self.styles.lock().unwrap();
+        let fills_tag = styles_xml.get_mut_or_create_child_by_tag("fills");
+
+        let mut fill_element = XmlElement::new("fill");
+        let mut pattern_fill_element = XmlElement::new("patternFill");
+
+        if let Some(pattern_type) = &fill.pattern_type {
+            pattern_fill_element.attributes.insert("patternType".to_string(), pattern_type.clone());
+        }
+        if let Some(fg_color) = &fill.fg_color {
+            let mut fg_color_element = XmlElement::new("fgColor");
+            fg_color_element.attributes.insert("rgb".to_string(), fg_color.clone());
+            pattern_fill_element.children.push(fg_color_element);
+        }
+        if let Some(bg_color) = &fill.bg_color {
+            let mut bg_color_element = XmlElement::new("bgColor");
+            bg_color_element.attributes.insert("rgb".to_string(), bg_color.clone());
+            pattern_fill_element.children.push(bg_color_element);
+        }
+
+        fill_element.children.push(pattern_fill_element);
+        fills_tag.children.push(fill_element);
+        let count = fills_tag.children.len();
+        fills_tag.attributes.insert("count".to_string(), count.to_string());
+        count - 1
+    }
+
+    fn add_xf_to_styles(&self, font_id: usize, fill_id: usize, border_id: usize, alignment_id: usize) -> usize {
+        let mut styles_xml = self.styles.lock().unwrap();
+        let cell_xfs_tag = styles_xml.get_mut_or_create_child_by_tag("cellXfs");
+
+        let mut xf_element = XmlElement::new("xf");
+        xf_element.attributes.insert("numFmtId".to_string(), "0".to_string());
+        xf_element.attributes.insert("fontId".to_string(), font_id.to_string());
+        xf_element.attributes.insert("fillId".to_string(), fill_id.to_string());
+        xf_element.attributes.insert("borderId".to_string(), border_id.to_string());
+        if font_id > 0 {
+            xf_element.attributes.insert("applyFont".to_string(), "1".to_string());
+        }
+        if fill_id > 0 {
+            xf_element.attributes.insert("applyFill".to_string(), "1".to_string());
+        }
+        if border_id > 0 {
+            xf_element.attributes.insert("applyBorder".to_string(), "1".to_string());
+        }
+        if alignment_id > 0 {
+            xf_element.attributes.insert("applyAlignment".to_string(), "1".to_string());
+        }
+
+        // Check if the xf already exists
+        for (i, xf) in cell_xfs_tag.children.iter().enumerate() {
+            if xf.attributes.get("fontId") == Some(&font_id.to_string())
+                && xf.attributes.get("fillId") == Some(&fill_id.to_string())
+                && xf.attributes.get("borderId") == Some(&border_id.to_string()) {
+                let has_alignment = xf.children.iter().any(|c| c.name == "alignment");
+                if alignment_id > 0 && has_alignment {
+                     return i;
+                }
+                if alignment_id == 0 && !has_alignment {
+                    return i;
+                }
+            }
+        }
+
+        cell_xfs_tag.children.push(xf_element);
+        let count = cell_xfs_tag.children.len();
+        cell_xfs_tag.attributes.insert("count".to_string(), count.to_string());
+        count - 1
+    }
+
     pub fn new(
         sheet_xml: Arc<Mutex<Xml>>,
         shared_strings: Arc<Mutex<Xml>>,
+        styles: Arc<Mutex<Xml>>,
         address: String,
     ) -> Self {
         Cell {
             sheet_xml,
             shared_strings,
+            styles,
             address,
+            font: None,
+            fill: None,
         }
     }
 
     pub fn set_number_value(&mut self, value: f64) {
         let mut xml = self.sheet_xml.lock().unwrap();
         let cell_element = self.get_or_create_cell_element(&mut xml);
-        cell_element.attributes.remove("t"); // 文字列型ではないのでt属性を削除
+        cell_element.attributes.remove("t");
+        cell_element.children.retain(|c| c.name != "f");
         if let Some(v) = cell_element.children.iter_mut().find(|c| c.name == "v") {
             v.text = Some(value.to_string());
         } else {
@@ -123,15 +296,51 @@ impl Cell {
         let sst_index = self.get_or_create_shared_string(value);
         let mut xml = self.sheet_xml.lock().unwrap();
         let cell_element = self.get_or_create_cell_element(&mut xml);
-        cell_element
-            .attributes
-            .insert("t".to_string(), "s".to_string());
+        cell_element.attributes.insert("t".to_string(), "s".to_string());
+        cell_element.children.retain(|c| c.name != "f");
         if let Some(v) = cell_element.children.iter_mut().find(|c| c.name == "v") {
             v.text = Some(sst_index.to_string());
         } else {
             let mut v_element = XmlElement::new("v");
             v_element.text = Some(sst_index.to_string());
             cell_element.children.push(v_element);
+        }
+    }
+
+    pub fn set_datetime_value(&mut self, value: NaiveDateTime) {
+        // Based on https://stackoverflow.com/questions/61546133/int-to-datetime-excel
+        let excel_epoch = chrono::NaiveDate::from_ymd_opt(1899, 12, 30).unwrap().and_hms_opt(0,0,0).unwrap();
+        let duration = value.signed_duration_since(excel_epoch);
+        let serial = duration.num_seconds() as f64 / 86400.0;
+        self.set_number_value(serial);
+        // TODO: スタイルで日付フォーマットを設定する
+    }
+
+    pub fn set_bool_value(&mut self, value: bool) {
+        let mut xml = self.sheet_xml.lock().unwrap();
+        let cell_element = self.get_or_create_cell_element(&mut xml);
+        cell_element.attributes.insert("t".to_string(), "b".to_string());
+        cell_element.children.retain(|c| c.name != "f");
+        if let Some(v) = cell_element.children.iter_mut().find(|c| c.name == "v") {
+            v.text = Some((if value { "1" } else { "0" }).to_string());
+        } else {
+            let mut v_element = XmlElement::new("v");
+            v_element.text = Some((if value { "1" } else { "0" }).to_string());
+            cell_element.children.push(v_element);
+        }
+    }
+
+    pub fn set_formula_value(&mut self, formula: &str) {
+        let mut xml = self.sheet_xml.lock().unwrap();
+        let cell_element = self.get_or_create_cell_element(&mut xml);
+        cell_element.attributes.remove("t");
+        cell_element.children.retain(|c| c.name != "v");
+        if let Some(f) = cell_element.children.iter_mut().find(|c| c.name == "f") {
+            f.text = Some(formula.to_string());
+        } else {
+            let mut f_element = XmlElement::new("f");
+            f_element.text = Some(formula.to_string());
+            cell_element.children.push(f_element);
         }
     }
 

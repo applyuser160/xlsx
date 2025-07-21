@@ -1,48 +1,55 @@
-mod xlsx {
-    pub mod book;
-    pub mod cell;
-    pub mod sheet;
-    pub mod test_book;
-    pub mod test_cell;
-    pub mod test_sheet;
-    pub mod test_xml;
-    pub mod xml;
-}
+#[path = "xlsx/book.rs"]
+pub mod book;
+#[path = "xlsx/cell.rs"]
+pub mod cell;
+#[path = "xlsx/sheet.rs"]
+pub mod sheet;
+#[path = "xlsx/style.rs"]
+pub mod style;
+#[path = "xlsx/xml.rs"]
+pub mod xml;
+
+#[cfg(test)]
+#[path = "xlsx/test_book.rs"]
+mod test_book;
+#[cfg(test)]
+#[path = "xlsx/test_cell.rs"]
+mod test_cell;
+#[cfg(test)]
+#[path = "xlsx/test_sheet.rs"]
+mod test_sheet;
+#[cfg(test)]
+#[path = "xlsx/test_xml.rs"]
+mod test_xml;
+
 
 use pyo3::prelude::*;
 
-use xlsx::book::Book;
-use xlsx::cell::Cell;
-use xlsx::sheet::Sheet;
-use xlsx::xml::{Xml, XmlElement};
+use book::Book;
+use cell::Cell;
+use sheet::Sheet;
+use style::{Font, PatternFill};
+use xml::{Xml, XmlElement};
 
 #[pyfunction]
 pub fn hello_from_bin() -> String {
     "Hello from sample-ext-lib!".to_string()
 }
 
-// #[pyfunction]
-// pub fn read_file(path: String, sheet: String, address: String) -> String {
-//     let path = std::path::Path::new(&path);
-//     let book = reader::xlsx::read(path).unwrap();
-//     book.get_sheet_by_name(sheet.as_str())
-//         .unwrap()
-//         .get_value(address)
-// }
-
 #[pyfunction]
 pub fn load_workbook(path: String) -> Book {
-    Book::new(path)
+    Book::new(&path)
 }
 
 #[pymodule]
-pub fn _core(m: &Bound<'_, PyModule>) -> PyResult<()> {
+fn xlsx(m: &Bound<'_, PyModule>) -> PyResult<()> {
     m.add_function(wrap_pyfunction!(hello_from_bin, m)?)?;
-    // m.add_function(wrap_pyfunction!(read_file, m)?)?;
     m.add_function(wrap_pyfunction!(load_workbook, m)?)?;
     m.add_class::<Book>()?;
     m.add_class::<Sheet>()?;
     m.add_class::<Cell>()?;
+    m.add_class::<Font>()?;
+    m.add_class::<PatternFill>()?;
     m.add_class::<Xml>()?;
     m.add_class::<XmlElement>()?;
     Ok(())

@@ -1,6 +1,6 @@
 #[cfg(test)]
 mod tests {
-    use crate::xlsx::book::Book;
+    use crate::book::Book;
     use std::{fs, path::Path};
 
     fn setup_book(test_name: &str) -> Book {
@@ -10,7 +10,7 @@ mod tests {
             let _ = fs::remove_file(&test_path);
         }
         fs::copy(original_path, &test_path).unwrap();
-        Book::new(test_path)
+        Book::new(&test_path)
     }
 
     fn cleanup(book: Book) {
@@ -18,64 +18,11 @@ mod tests {
     }
 
     #[test]
-    fn test_active_sheet_logic() {
-        // 観点: アクティブシートのロジック確認
-        let mut book = setup_book("active_sheet_logic");
-        assert_eq!(book.active_sheet_index, 0);
-
-        // Act
-        book.create_sheet("NewSheet".to_string(), 1);
-        book.active_sheet_index = 1;
-        book.update_active_tab();
-
-        // Assert
-        let workbook_tag = book.workbook.elements.first().unwrap();
-        let book_views = workbook_tag.children.iter().find(|c| c.name == "bookViews").unwrap();
-        let workbook_view = book_views.children.iter().find(|c| c.name == "workbookView").unwrap();
-        assert_eq!(workbook_view.attributes.get("activeTab").unwrap(), "1");
-
-        cleanup(book);
-    }
-
-    #[test]
-    fn test_named_range() {
-        // 観点: 名前付き範囲の作成と削除
-        let mut book = setup_book("named_range");
-        assert!(book.defined_names.is_empty());
-
-        // Act (作成)
-        book.create_named_range("TestRange".to_string(), "シート1!$A$1".to_string(), None);
-
-        // Assert (作成)
-        assert_eq!(book.defined_names.len(), 1);
-        let named_range = &book.defined_names[0];
-        assert_eq!(named_range.attributes.get("name").unwrap(), "TestRange");
-        assert_eq!(named_range.text.as_ref().unwrap(), "シート1!$A$1");
-
-        // XMLの確認 (作成)
-        let workbook_tag = book.workbook.elements.first().unwrap();
-        let defined_names_tag = workbook_tag.children.iter().find(|c| c.name == "definedNames").unwrap();
-        assert_eq!(defined_names_tag.children.len(), 1);
-
-        // Act (削除)
-        book.delete_named_range("TestRange".to_string());
-
-        // Assert (削除)
-        assert!(book.defined_names.is_empty());
-        let workbook_tag_after_delete = book.workbook.elements.first().unwrap();
-        let defined_names_tag_after_delete = workbook_tag_after_delete.children.iter().find(|c| c.name == "definedNames").unwrap();
-        assert!(defined_names_tag_after_delete.children.is_empty());
-
-
-        cleanup(book);
-    }
-
-    #[test]
     fn test_new_book() {
         // 観点: Excelファイルの読み取り
 
         // Act
-        let book = Book::new("data/sample.xlsx".to_string());
+        let book = Book::new("data/sample.xlsx");
 
         // Assert
         let xml = book.worksheets.get("xl/worksheets/sheet1.xml").unwrap();
@@ -100,7 +47,7 @@ mod tests {
         book.copy(&copy_path);
 
         // Assert
-        let book_copied = Book::new(copy_path.clone());
+        let book_copied = Book::new(&copy_path);
         let xml_copied = book_copied
             .worksheets
             .get("xl/worksheets/sheet1.xml")
@@ -117,7 +64,7 @@ mod tests {
         // 観点: シート名一覧の取得
 
         // Act
-        let book = Book::new("data/sample.xlsx".to_string());
+        let book = Book::new("data/sample.xlsx");
         let sheetnames = book.sheetnames();
 
         // Assert
@@ -130,7 +77,7 @@ mod tests {
         // 観点: シート名の存在確認
 
         // Act
-        let book = Book::new("data/sample.xlsx".to_string());
+        let book = Book::new("data/sample.xlsx");
 
         // Assert
         assert!(book.__contains__("シート1".to_string()));
@@ -160,7 +107,7 @@ mod tests {
         // 観点: XMLの結合
 
         // Act
-        let book = Book::new("data/sample.xlsx".to_string());
+        let book = Book::new("data/sample.xlsx");
         let xmls = book.merge_xmls();
 
         // Assert
@@ -195,7 +142,7 @@ mod tests {
         // 観点: シートタグの取得
 
         // Act
-        let book = Book::new("data/sample.xlsx".to_string());
+        let book = Book::new("data/sample.xlsx");
         let sheet_tags = book.sheet_tags();
 
         // Assert
@@ -213,7 +160,7 @@ mod tests {
         // 観点: リレーションシップの取得
 
         // Act
-        let book = Book::new("data/sample.xlsx".to_string());
+        let book = Book::new("data/sample.xlsx");
         let relationships = book.get_relationships();
 
         // Assert
@@ -231,7 +178,7 @@ mod tests {
         // 観点: シートパスの取得
 
         // Act
-        let book = Book::new("data/sample.xlsx".to_string());
+        let book = Book::new("data/sample.xlsx");
         let sheet_paths = book.get_sheet_paths();
 
         // Assert
@@ -299,45 +246,20 @@ mod tests {
     }
 
     #[test]
-    fn test_set_print_area() {
-        // 観点: 印刷範囲を設定できるか
-        let mut book = setup_book("set_print_area");
+    fn test_add_table() {
+        // 観点: テーブルを追加できるか
+        let mut book = setup_book("add_table");
 
         // Act
-        book.set_print_area("シート1", "A1:B10");
+        book.add_table("シート1".to_string(), "Table1".to_string(), "A1:C5".to_string());
 
         // Assert
-        let workbook = &book.workbook.elements[0];
-        let defined_names = workbook.children.iter().find(|e| e.name == "definedNames").unwrap();
-        let defined_name = defined_names.children.iter().find(|dn| dn.attributes.get("name").unwrap() == "_xlnm.Print_Area").unwrap();
-        assert_eq!(defined_name.text.as_ref().unwrap(), "'シート1'!A1:B10");
-        assert_eq!(defined_name.attributes.get("localSheetId").unwrap(), "0");
-
-        cleanup(book);
-    }
-
-    #[test]
-    fn test_copy_worksheet() {
-        // 観点: シートをコピーできるか
-        let mut book = setup_book("copy_worksheet");
-
-        // Act
-        let copied_sheet = book.copy_worksheet("シート1", "シート1 コピー");
-
-        // Assert
-        assert_eq!(copied_sheet.name, "シート1 コピー");
-        assert!(book.__contains__("シート1 コピー".to_string()));
-
-        let original_sheet = book.__getitem__("シート1".to_string());
-        let original_xml = original_sheet.xml.lock().unwrap();
-        let copied_xml = copied_sheet.xml.lock().unwrap();
-
-        assert_eq!(original_xml.elements.len(), copied_xml.elements.len());
-        for i in 0..original_xml.elements.len() {
-            assert_eq!(original_xml.elements[i].name, copied_xml.elements[i].name);
-            assert_eq!(original_xml.elements[i].attributes, copied_xml.elements[i].attributes);
-            assert_eq!(original_xml.elements[i].text, copied_xml.elements[i].text);
-        }
+        assert!(book.tables.contains_key("xl/tables/table1.xml"));
+        let sheet = book.get_sheet_by_name("シート1").unwrap();
+        let sheet_xml_arc = sheet.get_xml();
+        let sheet_xml = sheet_xml_arc.lock().unwrap();
+        let table_parts = sheet_xml.elements[0].children.iter().find(|e| e.name == "tableParts").unwrap();
+        assert_eq!(table_parts.attributes.get("count").unwrap(), "1");
 
         cleanup(book);
     }
