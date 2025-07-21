@@ -31,60 +31,60 @@ const TABLES_PREFIX: &str = "xl/tables/";
 const PIVOT_TABLES_PREFIX: &str = "xl/pivotTables/";
 const PIVOT_CACHES_PREFIX: &str = "xl/pivotCache/";
 
-/// Excelブック全体を表します。
+/// Excelブック全体
 ///
-/// この構造体は、Excelファイル（.xlsx）の読み込み、操作、保存の機能を提供します。
-/// シートの追加、削除、取得や、テーブルの追加などが可能です。
+/// Excelファイル（.xlsx）の読み込み、操作、保存機能の提供
+/// シートの追加、削除、取得や、テーブルの追加などが可能
 #[pyclass]
 pub struct Book {
-    /// Excelファイルのパス。新規作成の場合は空文字列。
+    /// Excelファイルのパス（新規作成の場合は空文字列）
     #[pyo3(get, set)]
     pub path: String,
 
-    /// `xl/_rels/` 以下に存在するリレーションシップファイル。
+    /// `xl/_rels/` 以下のリレーションシップファイル
     pub rels: HashMap<String, Xml>,
 
-    /// `xl/drawings/` 以下に存在する図形ファイル。
+    /// `xl/drawings/` 以下の図形ファイル
     pub drawings: HashMap<String, Xml>,
 
-    /// `xl/tables/` 以下に存在するテーブルファイル。
+    /// `xl/tables/` 以下のテーブルファイル
     pub tables: HashMap<String, Xml>,
 
-    /// `xl/pivotTables/` 以下に存在するピボットテーブルファイル。
+    /// `xl/pivotTables/` 以下のピボットテーブルファイル
     pub pivot_tables: HashMap<String, Xml>,
 
-    /// `xl/pivotCache/` 以下に存在するピボットキャッシュファイル。
+    /// `xl/pivotCache/` 以下のピボットキャッシュファイル
     pub pivot_caches: HashMap<String, Xml>,
 
-    /// `xl/theme/` 以下に存在するテーマファイル。
+    /// `xl/theme/` 以下のテーマファイル
     pub themes: HashMap<String, Xml>,
 
-    /// `xl/worksheets/` 以下に存在するワークシートファイル。
-    /// 複数箇所から共有されるため、`Arc<Mutex<>>` でラップされています。
+    /// `xl/worksheets/` 以下のワークシートファイル
+    /// 複数箇所から共有されるため、`Arc<Mutex<>>` でラップ
     pub worksheets: HashMap<String, Arc<Mutex<Xml>>>,
 
-    /// `xl/worksheets/_rels/` 以下に存在するシートごとのリレーションシップファイル。
+    /// `xl/worksheets/_rels/` 以下のシートごとリレーションシップファイル
     pub sheet_rels: HashMap<String, Xml>,
 
-    /// `xl/sharedStrings.xml`: 共有文字列テーブル。
+    /// `xl/sharedStrings.xml`: 共有文字列テーブル
     pub shared_strings: Arc<Mutex<Xml>>,
 
-    /// `xl/styles.xml`: スタイル情報。
+    /// `xl/styles.xml`: スタイル情報
     pub styles: Arc<Mutex<Xml>>,
 
-    /// `xl/workbook.xml`: ブックの構造を定義する主要なXML。
+    /// `xl/workbook.xml`: ブックの構造を定義する主要XML
     pub workbook: Xml,
 
-    /// `xl/vbaProject.bin`: VBAマクロプロジェクト（存在する場合）。
+    /// `xl/vbaProject.bin`: VBAマクロプロジェクト（存在する場合）
     pub vba_project: Option<Vec<u8>>,
 }
 
 #[pymethods]
 impl Book {
-    /// 新しい `Book` インスタンスを作成します。
+    /// 新しい `Book` インスタンス作成
     ///
-    /// - `path` が空の場合: 新しい空のブックを作成します。
-    /// - `path` が指定された場合: 既存の.xlsxファイルを読み込みます。
+    /// - `path` が空の場合: 新しい空のブック作成
+    /// - `path` が指定された場合: 既存の.xlsxファイルを読み込み
     #[new]
     #[pyo3(signature = (path = ""))]
     pub fn new(path: &str) -> Self {
@@ -95,7 +95,7 @@ impl Book {
         }
     }
 
-    /// シート名のリストを取得します。
+    /// シート名リストの取得
     #[getter]
     pub fn sheetnames(&self) -> Vec<String> {
         self.sheet_tags()
@@ -104,28 +104,28 @@ impl Book {
             .collect()
     }
 
-    /// シートをイテレートするためのシート名リストを返します。
-    /// Pythonの `for sheet_name in book:` のように使えます。
+    /// シートをイテレートするためのシート名リスト返却
+    /// Pythonの `for sheet_name in book:` のように使用
     pub fn __iter__(&self) -> Vec<String> {
         self.sheetnames()
     }
 
-    /// 指定された名前のシートが存在するかどうかを確認します。
-    /// Pythonの `sheet_name in book` のように使えます。
+    /// 指定された名前のシート存在確認
+    /// Pythonの `sheet_name in book` のように使用
     pub fn __contains__(&self, key: &str) -> bool {
         self.sheetnames().iter().any(|name| name == key)
     }
 
-    /// 指定された名前のシートを取得します。
-    /// Pythonの `book[sheet_name]` のように使えます。
+    /// 指定された名前のシート取得
+    /// Pythonの `book[sheet_name]` のように使用
     pub fn __getitem__(&self, key: &str) -> PyResult<Sheet> {
         self.get_sheet_by_name(key).ok_or_else(|| {
             PyErr::new::<pyo3::exceptions::PyKeyError, _>(format!("No sheet named '{key}'"))
         })
     }
 
-    /// 指定された名前のシートを削除します。
-    /// Pythonの `del book[sheet_name]` のように使えます。
+    /// 指定された名前のシート削除
+    /// Pythonの `del book[sheet_name]` のように使用
     pub fn __delitem__(&mut self, key: &str) -> PyResult<()> {
         let sheet = self.get_sheet_by_name(key).ok_or_else(|| {
             PyErr::new::<pyo3::exceptions::PyKeyError, _>(format!("No sheet named '{key}'"))
@@ -134,7 +134,7 @@ impl Book {
         Ok(())
     }
 
-    /// シートを指定して、そのインデックス（0から始まる位置）を取得します。
+    /// シートを指定して、そのインデックス（0から始まる位置）取得
     pub fn index(&self, sheet: &Sheet) -> PyResult<usize> {
         self.sheetnames()
             .iter()
@@ -147,7 +147,7 @@ impl Book {
             })
     }
 
-    /// 指定されたシートをブックから削除します。
+    /// 指定されたシートをブックから削除
     pub fn remove(&mut self, sheet: &Sheet) {
         let sheet_paths = self.get_sheet_paths();
         let sheet_path = match sheet_paths.get(&sheet.name) {
@@ -158,7 +158,7 @@ impl Book {
             }
         };
 
-        // 1. ワークシートXMLを削除
+        // 1. ワークシートXML削除
         self.worksheets.remove(sheet_path);
 
         // 2. workbook.xmlから<sheet>タグを削除し、関連するr:idを取得
@@ -169,10 +169,10 @@ impl Book {
             self.remove_relationship_by_id("xl/_rels/workbook.xml.rels", &rid);
         }
 
-        // TODO: シートに関連するrelsファイル（例: xl/worksheets/_rels/sheet1.xml.rels）も削除する
+        // TODO: シートに関連するrelsファイル（例: xl/worksheets/_rels/sheet1.xml.rels）も削除
     }
 
-    /// 新しいシートを作成し、指定された位置に挿入します。
+    /// 新しいシートを作成し、指定された位置に挿入
     pub fn create_sheet(&mut self, title: &str, index: Option<usize>) -> PyResult<Sheet> {
         if self.__contains__(title) {
             return Err(PyErr::new::<pyo3::exceptions::PyValueError, _>(format!(
@@ -206,7 +206,7 @@ impl Book {
         ))
     }
 
-    /// ブックを別のパスにコピーします。
+    /// ブックを別のパスにコピー
     pub fn copy(&self, path: &str) -> PyResult<()> {
         let new_file = OpenOptions::new()
             .write(true)
@@ -220,7 +220,7 @@ impl Book {
         let xmls = self.collect_all_xmls();
 
         if self.path.is_empty() {
-            // 新規ブックの場合、すべてのXMLを直接書き込む
+            // 新規ブックの場合、すべてのXMLを直接書き込み
             for (file_name, xml) in &xmls {
                 zip_writer
                     .start_file(file_name, options)
@@ -247,7 +247,7 @@ impl Book {
         Ok(())
     }
 
-    /// 現在の変更を元のファイルに保存します。
+    /// 現在の変更を元のファイルに保存
     pub fn save(&self) -> PyResult<()> {
         if self.path.is_empty() {
             return Err(PyErr::new::<pyo3::exceptions::PyValueError, _>(
@@ -260,7 +260,7 @@ impl Book {
 
 // --- Bookの内部実装 ---
 impl Book {
-    /// 新しい空のブックを作成します。
+    /// 新しい空のブック作成
     fn new_empty() -> Self {
         // ... (実装は元のコードと同様)
         let mut rels: HashMap<String, Xml> = HashMap::new();
@@ -269,7 +269,7 @@ impl Book {
 </Relationships>"#;
         rels.insert(
             "xl/_rels/workbook.xml.rels".to_string(),
-            Xml::new(&workbook_rels.to_string()),
+            Xml::new(workbook_rels),
         );
 
         let workbook_xml = r#"<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
@@ -289,24 +289,25 @@ impl Book {
 </styleSheet>"#;
 
         Book {
-                path: "".to_string(),
-                rels,
-                drawings: HashMap::new(),
-                tables: HashMap::new(),
-                pivot_tables: HashMap::new(),
-                pivot_caches: HashMap::new(),
-                themes: HashMap::new(),
-                worksheets: HashMap::new(),
-                sheet_rels: HashMap::new(),
-                shared_strings: Arc::new(Mutex::new(Xml::new(
-                    &r#"<?xml version="1.0" encoding="UTF-8" standalone="yes"?><sst xmlns="http://schemas.openxmlformats.org/spreadsheetml/2006/main" count="0" uniqueCount="0"></sst>"#.to_string()))),
-                styles: Arc::new(Mutex::new(Xml::new(&styles_xml.to_string()))),
-                workbook: Xml::new(&workbook_xml.to_string()),
-                vba_project: None,
-            }
+            path: "".to_string(),
+            rels,
+            drawings: HashMap::new(),
+            tables: HashMap::new(),
+            pivot_tables: HashMap::new(),
+            pivot_caches: HashMap::new(),
+            themes: HashMap::new(),
+            worksheets: HashMap::new(),
+            sheet_rels: HashMap::new(),
+            shared_strings: Arc::new(Mutex::new(Xml::new(
+                r#"<?xml version="1.0" encoding="UTF-8" standalone="yes"?><sst xmlns="http://schemas.openxmlformats.org/spreadsheetml/2006/main" count="0" uniqueCount="0"></sst>"#,
+            ))),
+            styles: Arc::new(Mutex::new(Xml::new(styles_xml))),
+            workbook: Xml::new(workbook_xml),
+            vba_project: None,
+        }
     }
 
-    /// .xlsxファイルを読み込んで `Book` を作成します。
+    /// .xlsxファイルを読み込んで `Book` 作成
     fn from_file(path: &str) -> Self {
         let file = File::open(path).unwrap_or_else(|_| panic!("File not found: {path}"));
         let mut archive = ZipArchive::new(file).unwrap();
@@ -361,7 +362,7 @@ impl Book {
         book
     }
 
-    /// ブック内のすべてのXMLデータをHashMapに収集します。
+    /// ブック内のすべてのXMLデータをHashMapに収集
     fn collect_all_xmls(&self) -> HashMap<String, Xml> {
         let mut xmls = self.rels.clone();
         xmls.insert(WORKBOOK_FILENAME.to_string(), self.workbook.clone());
@@ -386,7 +387,7 @@ impl Book {
         xmls
     }
 
-    /// ZIPアーカイブにファイルと変更を書き込みます。
+    /// ZIPアーカイブにファイルと変更を書き込み
     fn write_zip_archive<W: Write + std::io::Seek>(
         &self,
         archive: &mut ZipArchive<File>,
@@ -425,7 +426,7 @@ impl Book {
         Ok(())
     }
 
-    /// `xl/workbook.xml` 内の `<sheet>` タグのリストを取得します。
+    /// `xl/workbook.xml` 内の `<sheet>` タグリスト取得
     fn sheet_tags(&self) -> Vec<XmlElement> {
         self.workbook
             .elements
@@ -434,7 +435,7 @@ impl Book {
             .map_or(Vec::new(), |sheets| sheets.children.clone())
     }
 
-    /// `xl/_rels/workbook.xml.rels` 内の `<Relationship>` タグのリストを取得します。
+    /// `xl/_rels/workbook.xml.rels` 内の `<Relationship>` タグリスト取得
     fn get_relationships(&self) -> Vec<XmlElement> {
         self.rels
             .get("xl/_rels/workbook.xml.rels")
@@ -442,7 +443,7 @@ impl Book {
             .map_or(Vec::new(), |rels| rels.children.clone())
     }
 
-    /// シート名とパスのマッピングを取得します。
+    /// シート名とパスのマッピング取得
     fn get_sheet_paths(&self) -> HashMap<String, String> {
         let relationships = self.get_relationships();
         let sheet_paths_by_rid: HashMap<String, String> = relationships
@@ -470,7 +471,7 @@ impl Book {
             .collect()
     }
 
-    /// シート名から `Sheet` オブジェクトを取得します。
+    /// シート名から `Sheet` オブジェクト取得
     fn get_sheet_by_name(&self, name: &str) -> Option<Sheet> {
         let sheet_path = self.get_sheet_paths().get(name)?.clone();
         let xml = self.worksheets.get(&sheet_path)?.clone();
@@ -484,7 +485,7 @@ impl Book {
 
     // --- シート操作のヘルパー関数 ---
 
-    /// `workbook.xml` から `<sheet>` タグを削除し、その `r:id` を返します。
+    /// `workbook.xml` から `<sheet>` タグを削除し、その `r:id` を返却
     fn remove_sheet_tag_from_workbook(&mut self, sheet_name: &str) -> Option<String> {
         let sheets_tag = self
             .workbook
@@ -506,7 +507,7 @@ impl Book {
         None
     }
 
-    /// 指定されたrelsファイルからIDで指定された`<Relationship>`を削除します。
+    /// 指定されたrelsファイルからIDで指定された`<Relationship>`を削除
     fn remove_relationship_by_id(&mut self, rels_path: &str, rid: &str) {
         if let Some(rels) = self.rels.get_mut(rels_path) {
             if let Some(relationships) = rels.elements.first_mut() {
@@ -517,19 +518,18 @@ impl Book {
         }
     }
 
-    /// 空のワークシートXMLを生成します。
+    /// 空のワークシートXML生成
     fn create_empty_worksheet_xml(&self) -> Xml {
         Xml::new(
-            &r#"<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
+            r#"<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
             <worksheet xmlns="http://schemas.openxmlformats.org/spreadsheetml/2006/main"
             xmlns:r="http://schemas.openxmlformats.org/officeDocument/2006/relationships">
                 <sheetData/>
-            </worksheet>"#
-                .to_string(),
+            </worksheet>"#,
         )
     }
 
-    /// `workbook.xml` の `<sheets>` に新しい `<sheet>` を追加します。
+    /// `workbook.xml` の `<sheets>` に新しい `<sheet>` を追加
     fn add_sheet_tag_to_workbook(
         &mut self,
         title: &str,
@@ -563,7 +563,7 @@ impl Book {
         }
     }
 
-    /// `workbook.xml.rels` に新しいリレーションシップを追加します。
+    /// `workbook.xml.rels` に新しいリレーションシップ追加
     fn add_relationship_to_workbook_rels(&mut self, rid: &str, target: &str) {
         if let Some(rels) = self
             .rels

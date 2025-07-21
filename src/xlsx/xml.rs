@@ -5,37 +5,37 @@ use std::collections::HashMap;
 use std::fs::OpenOptions;
 use std::io::{BufRead, BufWriter, Write};
 
-/// Represents an XML document.
+/// XMLドキュメント
 ///
-/// This struct holds the XML declaration and a list of root elements.
+/// XML宣言とルート要素のリストを保持
 #[pyclass]
 #[derive(Debug, Clone)]
 pub struct Xml {
-    /// The XML declaration attributes, such as version and encoding.
+    /// XML宣言の属性（バージョンやエンコーディングなど）
     pub decl: HashMap<String, String>,
-    /// The root elements of the XML document.
+    /// XMLドキュメントのルート要素
     pub elements: Vec<XmlElement>,
 }
 
-/// Represents an element in an XML document.
+/// XMLドキュメント内の要素
 ///
-/// This struct holds the tag name, attributes, child elements, and optional text content.
+/// タグ名、属性、子要素、およびオプションのテキストコンテンツを保持
 #[pyclass]
 #[derive(Debug, Clone)]
 pub struct XmlElement {
-    /// The name of the XML tag.
+    /// XMLタグの名前
     pub name: String,
-    /// The attributes of the XML tag.
+    /// XMLタグの属性
     pub attributes: HashMap<String, String>,
-    /// The child elements of the XML tag.
+    /// XMLタグの子要素
     pub children: Vec<XmlElement>,
-    /// The text content of the XML tag, if any.
+    /// XMLタグのテキストコンテンツ
     pub text: Option<String>,
 }
 
 #[pymethods]
 impl XmlElement {
-    /// Creates a new `XmlElement` with the given tag name.
+    /// 指定されたタグ名で新しい`XmlElement`を作成
     #[new]
     pub fn new(name: &str) -> Self {
         XmlElement {
@@ -48,14 +48,14 @@ impl XmlElement {
 }
 
 impl Xml {
-    /// Creates a new `Xml` instance by parsing the given XML content string.
-    pub fn new(contents: &String) -> Self {
+    /// 指定されたXMLコンテンツ文字列を解析して新しい`Xml`インスタンスを作成
+    pub fn new(contents: &str) -> Self {
         let mut reader = Reader::from_str(contents);
         let mut buf: Vec<u8> = Vec::new();
         let mut elements: Vec<XmlElement> = Vec::new();
         let mut decl: HashMap<String, String> = HashMap::new();
 
-        // XML declaration parsing function
+        // XML宣言解析関数
         fn parse_decl_element(decl: &quick_xml::events::BytesDecl) -> HashMap<String, String> {
             let mut map = HashMap::new();
             if let Ok(version) = decl.version() {
@@ -79,7 +79,7 @@ impl Xml {
             map
         }
 
-        // Main parsing loop
+        // メイン解析ループ
         loop {
             match reader.read_event_into(&mut buf) {
                 Ok(Event::Start(ref e)) => {
@@ -99,7 +99,7 @@ impl Xml {
         Self { decl, elements }
     }
 
-    /// Saves the XML document to the specified file path.
+    /// XMLドキュメントを指定されたファイルパスに保存
     pub fn save_file(&self, path: &str) {
         let file = OpenOptions::new()
             .write(true)
@@ -110,31 +110,31 @@ impl Xml {
         let writer = BufWriter::new(file);
         let mut xml_writer = Writer::new(writer);
 
-        // Write declaration
+        // 宣言の書き込み
         Self::write_decl(&mut xml_writer, &self.decl);
 
-        // Write elements
+        // 要素の書き込み
         for element in &self.elements {
             XmlElement::write_element(&mut xml_writer, element);
         }
     }
 
-    /// Converts the XML document to a byte buffer.
+    /// XMLドキュメントをバイトバッファに変換
     pub fn to_buf(&self) -> Vec<u8> {
         let mut buffer = Vec::new();
         let mut xml_writer = Writer::new(&mut buffer);
 
-        // Write declaration
+        // 宣言の書き込み
         Self::write_decl(&mut xml_writer, &self.decl);
 
-        // Write elements
+        // 要素の書き込み
         for element in &self.elements {
             XmlElement::write_element(&mut xml_writer, element);
         }
         buffer
     }
 
-    /// Finds a mutable child element by tag name, or creates it if it doesn't exist.
+    /// タグ名で子要素を検索し、存在しない場合は作成して返す
     pub fn get_mut_or_create_child_by_tag(&mut self, tag_name: &str) -> &mut XmlElement {
         let style_sheet = self.elements.first_mut().unwrap();
         let position = style_sheet.children.iter().position(|c| c.name == tag_name);
@@ -148,7 +148,7 @@ impl Xml {
         }
     }
 
-    /// Writes the XML declaration to the writer.
+    /// XML宣言をライターに書き込み
     fn write_decl<W: Write>(writer: &mut Writer<W>, decl_hash_map: &HashMap<String, String>) {
         let version = decl_hash_map.get("version").map(|e| e.as_str());
         let encoding = decl_hash_map.get("encoding").map(|e| e.as_str());
@@ -159,7 +159,7 @@ impl Xml {
 }
 
 impl XmlElement {
-    /// Parses an XML element from the reader.
+    /// リーダーからXML要素を解析
     fn parse_element<R: BufRead>(
         reader: &mut Reader<R>,
         start_tag: &quick_xml::events::BytesStart,
@@ -203,7 +203,7 @@ impl XmlElement {
         }
     }
 
-    /// Parses an empty XML element.
+    /// 空のXML要素を解析
     fn parse_empty_element(start_tag: &quick_xml::events::BytesStart) -> XmlElement {
         let name = Self::get_name(start_tag);
         let attributes = Self::get_attributes(start_tag);
@@ -215,7 +215,7 @@ impl XmlElement {
         }
     }
 
-    /// Writes the XML element to the writer.
+    /// XML要素をライターに書き込み
     fn write_element<W: Write>(writer: &mut Writer<W>, element: &XmlElement) {
         let mut start = BytesStart::new(&element.name);
         for (k, v) in &element.attributes {
@@ -244,12 +244,12 @@ impl XmlElement {
             .unwrap();
     }
 
-    /// Extracts the tag name from a `BytesStart` event.
+    /// `BytesStart`イベントからタグ名を抽出
     fn get_name(start_tag: &quick_xml::events::BytesStart) -> String {
         String::from_utf8_lossy(start_tag.name().as_ref()).to_string()
     }
 
-    /// Extracts the attributes from a `BytesStart` event.
+    /// `BytesStart`イベントから属性を抽出
     fn get_attributes(start_tag: &quick_xml::events::BytesStart) -> HashMap<String, String> {
         start_tag
             .attributes()
