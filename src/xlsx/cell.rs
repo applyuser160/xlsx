@@ -26,7 +26,7 @@ impl Cell {
     /// セルの値の取得
     #[getter]
     pub fn value(&self) -> Option<String> {
-        let xml: MutexGuard<Xml> = self.sheet_xml.lock().unwrap();
+        let xml: MutexGuard<Xml> = self.sheet_xml.lock().expect("Failed to lock sheet xml");
         let worksheet: &XmlElement = xml.elements.first()?;
         let sheet_data: &XmlElement = worksheet.children.iter().find(|e| e.name == "sheetData")?;
 
@@ -34,9 +34,13 @@ impl Cell {
             .children
             .iter()
             .filter(|r| r.name == "row")
-            .flat_map(|row| row.children.iter().filter(|c| c.name == "c"))
+            .flat_map(|row| &row.children)
+            .filter(|c| c.name == "c")
             .find(|cell_element| cell_element.attributes.get("r") == Some(&self.address))
-            .and_then(|cell_element| self.get_value_from_cell_element(cell_element))
+            .map(|cell_element| {
+                self.get_value_from_cell_element(cell_element)
+                    .unwrap_or_default()
+            })
     }
 
     /// セルの値の設定
@@ -68,9 +72,10 @@ impl Cell {
     fn set_font(&mut self, font: Font) {
         self.font = Some(font.clone());
         let font_id: usize = self.add_font_to_styles(&font);
-        let fill_id: usize = self.add_fill_to_styles(&self.fill.clone().unwrap_or_default());
+        let fill_id: usize =
+            self.add_fill_to_styles(self.fill.as_ref().unwrap_or(&PatternFill::default()));
         let xf_id: usize = self.add_xf_to_styles(font_id, fill_id, 0, 0);
-        let mut xml: MutexGuard<Xml> = self.sheet_xml.lock().unwrap();
+        let mut xml: MutexGuard<Xml> = self.sheet_xml.lock().expect("Failed to lock sheet xml");
         let cell_element: &mut XmlElement = self.get_or_create_cell_element(&mut xml);
         cell_element
             .attributes
@@ -87,10 +92,11 @@ impl Cell {
     #[setter]
     fn set_fill(&mut self, fill: PatternFill) {
         self.fill = Some(fill.clone());
-        let font_id: usize = self.add_font_to_styles(&self.font.clone().unwrap_or_default());
+        let font_id: usize =
+            self.add_font_to_styles(self.font.as_ref().unwrap_or(&Font::default()));
         let fill_id: usize = self.add_fill_to_styles(&fill);
         let xf_id: usize = self.add_xf_to_styles(font_id, fill_id, 0, 0);
-        let mut xml: MutexGuard<Xml> = self.sheet_xml.lock().unwrap();
+        let mut xml: MutexGuard<Xml> = self.sheet_xml.lock().expect("Failed to lock sheet xml");
         let cell_element: &mut XmlElement = self.get_or_create_cell_element(&mut xml);
         cell_element
             .attributes
@@ -133,7 +139,10 @@ impl Cell {
     fn get_shared_string_value(&self, cell_element: &XmlElement) -> Option<String> {
         let v_element: &XmlElement = cell_element.children.iter().find(|e| e.name == "v")?;
         let idx: usize = v_element.text.as_ref()?.parse::<usize>().ok()?;
-        let shared_strings_xml: MutexGuard<Xml> = self.shared_strings.lock().unwrap();
+        let shared_strings_xml: MutexGuard<Xml> = self
+            .shared_strings
+            .lock()
+            .expect("Failed to lock shared strings");
         let sst: &XmlElement = shared_strings_xml.elements.first()?;
         let si: &XmlElement = sst.children.get(idx)?;
         si.children.first().and_then(|t| t.text.clone())
@@ -148,7 +157,7 @@ impl Cell {
 
     /// スタイルXMLへのフォントの追加とフォントIDの返却
     fn add_font_to_styles(&self, font: &Font) -> usize {
-        let mut styles_xml: MutexGuard<Xml> = self.styles.lock().unwrap();
+        let mut styles_xml: MutexGuard<Xml> = self.styles.lock().expect("Failed to lock styles");
         let fonts_tag: &mut XmlElement = styles_xml.get_mut_or_create_child_by_tag("fonts");
 
         if let Some(index) = fonts_tag.children.iter().position(|f| {
@@ -210,7 +219,7 @@ impl Cell {
 
     /// スタイルXMLへの塗りつぶしの追加と塗りつぶしIDの返却
     fn add_fill_to_styles(&self, fill: &PatternFill) -> usize {
-        let mut styles_xml: MutexGuard<Xml> = self.styles.lock().unwrap();
+        let mut styles_xml: MutexGuard<Xml> = self.styles.lock().expect("Failed to lock styles");
         let fills_tag: &mut XmlElement = styles_xml.get_mut_or_create_child_by_tag("fills");
 
         let mut fill_element: XmlElement = XmlElement::new("fill");
@@ -258,7 +267,7 @@ impl Cell {
         border_id: usize,
         alignment_id: usize,
     ) -> usize {
-        let mut styles_xml: MutexGuard<Xml> = self.styles.lock().unwrap();
+        let mut styles_xml: MutexGuard<Xml> = self.styles.lock().expect("Failed to lock styles");
         let cell_xfs_tag: &mut XmlElement = styles_xml.get_mut_or_create_child_by_tag("cellXfs");
 
         if let Some(index) = cell_xfs_tag.children.iter().position(|xf| {
@@ -318,7 +327,7 @@ impl Cell {
 
     /// セルの値の数値としての設定
     pub fn set_number_value(&mut self, value: f64) {
-        let mut xml: MutexGuard<Xml> = self.sheet_xml.lock().unwrap();
+        let mut xml: MutexGuard<Xml> = self.sheet_xml.lock().expect("Failed to lock sheet xml");
         let cell_element: &mut XmlElement = self.get_or_create_cell_element(&mut xml);
         cell_element.attributes.remove("t");
         cell_element.children.retain(|c| c.name != "f");
@@ -334,7 +343,7 @@ impl Cell {
     /// セルの値の文字列としての設定
     pub fn set_string_value(&mut self, value: &str) {
         let sst_index: usize = self.get_or_create_shared_string(value);
-        let mut xml: MutexGuard<Xml> = self.sheet_xml.lock().unwrap();
+        let mut xml: MutexGuard<Xml> = self.sheet_xml.lock().expect("Failed to lock sheet xml");
         let cell_element: &mut XmlElement = self.get_or_create_cell_element(&mut xml);
         cell_element
             .attributes
@@ -365,7 +374,7 @@ impl Cell {
 
     /// セルの値のブール値としての設定
     pub fn set_bool_value(&mut self, value: bool) {
-        let mut xml: MutexGuard<Xml> = self.sheet_xml.lock().unwrap();
+        let mut xml: MutexGuard<Xml> = self.sheet_xml.lock().expect("Failed to lock sheet xml");
         let cell_element: &mut XmlElement = self.get_or_create_cell_element(&mut xml);
         cell_element
             .attributes
@@ -382,7 +391,7 @@ impl Cell {
 
     /// セルの値の数式としての設定
     pub fn set_formula_value(&mut self, formula: &str) {
-        let mut xml: MutexGuard<Xml> = self.sheet_xml.lock().unwrap();
+        let mut xml: MutexGuard<Xml> = self.sheet_xml.lock().expect("Failed to lock sheet xml");
         let cell_element: &mut XmlElement = self.get_or_create_cell_element(&mut xml);
         cell_element.attributes.remove("t");
         cell_element.children.retain(|c| c.name != "v");
@@ -402,45 +411,56 @@ impl Cell {
             .elements
             .first_mut()
             .and_then(|ws| ws.children.iter_mut().find(|e| e.name == "sheetData"))
-            .expect("sheetData not found");
+            .expect("sheetData not found in sheet xml");
 
-        let row_index: usize = sheet_data
-            .children
-            .iter()
-            .position(|r| r.name == "row" && r.attributes.get("r") == Some(&row_num.to_string()))
-            .unwrap_or_else(|| {
-                let mut new_row: XmlElement = XmlElement::new("row");
-                new_row
-                    .attributes
-                    .insert("r".to_string(), row_num.to_string());
-                sheet_data.children.push(new_row);
-                sheet_data.children.len() - 1
-            });
+        let row_index: usize =
+            match sheet_data.children.iter().position(|r| {
+                r.name == "row" && r.attributes.get("r") == Some(&row_num.to_string())
+            }) {
+                Some(idx) => idx,
+                None => {
+                    let mut new_row: XmlElement = XmlElement::new("row");
+                    new_row
+                        .attributes
+                        .insert("r".to_string(), row_num.to_string());
+                    sheet_data.children.push(new_row);
+                    sheet_data.children.len() - 1
+                }
+            };
 
-        let cell_index: usize = sheet_data.children[row_index]
+        let cell_index: usize = match sheet_data.children[row_index]
             .children
             .iter()
             .position(|c| c.name == "c" && c.attributes.get("r") == Some(&self.address))
-            .unwrap_or_else(|| {
+        {
+            Some(idx) => idx,
+            None => {
                 let mut new_cell: XmlElement = XmlElement::new("c");
                 new_cell
                     .attributes
                     .insert("r".to_string(), self.address.clone());
                 sheet_data.children[row_index].children.push(new_cell);
                 sheet_data.children[row_index].children.len() - 1
-            });
+            }
+        };
 
         &mut sheet_data.children[row_index].children[cell_index]
     }
 
     /// 共有文字列XML内の共有文字列の取得または作成
     fn get_or_create_shared_string(&mut self, text: &str) -> usize {
-        let mut shared_strings_xml: MutexGuard<Xml> = self.shared_strings.lock().unwrap();
+        let mut shared_strings_xml: MutexGuard<Xml> = self
+            .shared_strings
+            .lock()
+            .expect("Failed to lock shared strings");
 
         if shared_strings_xml.elements.is_empty() {
             shared_strings_xml.elements.push(XmlElement::new("sst"));
         }
-        let sst_element: &mut XmlElement = shared_strings_xml.elements.first_mut().unwrap();
+        let sst_element: &mut XmlElement = shared_strings_xml
+            .elements
+            .first_mut()
+            .expect("sst element not found in shared strings");
 
         if let Some(index) = sst_element
             .children
@@ -460,20 +480,23 @@ impl Cell {
 
     /// セルアドレス (例: "A1") の行と列の番号へのデコード
     fn decode_address(&self) -> (u32, u32) {
-        let mut col_str: String = String::new();
-        let mut row_str: String = String::new();
-        for ch in self.address.chars() {
-            if ch.is_alphabetic() {
-                col_str.push(ch);
-            } else if ch.is_ascii_digit() {
-                row_str.push(ch);
-            }
-        }
-        let row: u32 = row_str.parse::<u32>().expect("Invalid row number");
-        let mut col: u32 = 0;
-        for (i, ch) in col_str.to_uppercase().chars().rev().enumerate() {
-            col += (ch as u32 - 'A' as u32 + 1) * 26u32.pow(i as u32);
-        }
+        let col_str: String = self.address.chars().filter(|c| c.is_alphabetic()).collect();
+        let row_str: String = self
+            .address
+            .chars()
+            .filter(|c| c.is_ascii_digit())
+            .collect();
+        let row: u32 = row_str
+            .parse::<u32>()
+            .expect("Invalid row number in address");
+        let col: u32 = col_str
+            .to_uppercase()
+            .chars()
+            .rev()
+            .enumerate()
+            .fold(0, |acc, (i, ch)| {
+                acc + (ch as u32 - 'A' as u32 + 1) * 26u32.pow(i as u32)
+            });
         (row, col)
     }
 }
