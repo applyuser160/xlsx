@@ -121,87 +121,88 @@ impl Book {
             }
         } else {
             let file_result: Result<File, std::io::Error> = File::open(path);
-        if file_result.is_err() {
-            panic!("File not found: {path}");
-        }
-        let file = file_result.unwrap();
-        let mut archive: ZipArchive<File> = ZipArchive::new(file).unwrap();
+            if file_result.is_err() {
+                panic!("File not found: {path}");
+            }
+            let file = file_result.unwrap();
+            let mut archive: ZipArchive<File> = ZipArchive::new(file).unwrap();
 
-        let mut rels: HashMap<String, Xml> = HashMap::new();
-        let mut drawings: HashMap<String, Xml> = HashMap::new();
-        let mut tables: HashMap<String, Xml> = HashMap::new();
-        let mut pivot_tables: HashMap<String, Xml> = HashMap::new();
-        let mut pivot_caches: HashMap<String, Xml> = HashMap::new();
-        let mut themes: HashMap<String, Xml> = HashMap::new();
-        let mut worksheets: HashMap<String, Arc<Mutex<Xml>>> = HashMap::new();
-        let mut sheet_rels: HashMap<String, Xml> = HashMap::new();
-        let mut shared_strings: Arc<Mutex<Xml>> = Arc::new(Mutex::new(Xml::new(&String::new())));
-        let mut styles: Arc<Mutex<Xml>> = Arc::new(Mutex::new(Xml::new(&String::new())));
-        let mut workbook: Xml = Xml::new(&String::new());
-        let mut vba_project: Option<Vec<u8>> = None;
+            let mut rels: HashMap<String, Xml> = HashMap::new();
+            let mut drawings: HashMap<String, Xml> = HashMap::new();
+            let mut tables: HashMap<String, Xml> = HashMap::new();
+            let mut pivot_tables: HashMap<String, Xml> = HashMap::new();
+            let mut pivot_caches: HashMap<String, Xml> = HashMap::new();
+            let mut themes: HashMap<String, Xml> = HashMap::new();
+            let mut worksheets: HashMap<String, Arc<Mutex<Xml>>> = HashMap::new();
+            let mut sheet_rels: HashMap<String, Xml> = HashMap::new();
+            let mut shared_strings: Arc<Mutex<Xml>> =
+                Arc::new(Mutex::new(Xml::new(&String::new())));
+            let mut styles: Arc<Mutex<Xml>> = Arc::new(Mutex::new(Xml::new(&String::new())));
+            let mut workbook: Xml = Xml::new(&String::new());
+            let mut vba_project: Option<Vec<u8>> = None;
 
-        for i in 0..archive.len() {
-            let mut file: zip::read::ZipFile<'_> = archive.by_index(i).unwrap();
-            let name: String = file.name().to_string();
+            for i in 0..archive.len() {
+                let mut file: zip::read::ZipFile<'_> = archive.by_index(i).unwrap();
+                let name: String = file.name().to_string();
 
-            if name.ends_with(XML_SUFFIX) {
-                let mut contents: String = String::new();
-                file.read_to_string(&mut contents).unwrap();
-                let xml = Xml::new(&contents);
-
-                if name.starts_with(DRAWINGS_PREFIX) {
-                    drawings.insert(name, xml);
-                } else if name.starts_with(TABLES_PREFIX) {
-                    tables.insert(name, xml);
-                } else if name.starts_with(PIVOT_TABLES_PREFIX) {
-                    pivot_tables.insert(name, xml);
-                } else if name.starts_with(PIVOT_CACHES_PREFIX) {
-                    pivot_caches.insert(name, xml);
-                } else if name.starts_with(THEME_PREFIX) {
-                    themes.insert(name, xml);
-                } else if name.starts_with(WORKSHEETS_PREFIX) {
-                    worksheets.insert(name, Arc::new(Mutex::new(xml)));
-                } else if name == WORKBOOK_FILENAME {
-                    workbook = xml;
-                } else if name == STYLES_FILENAME {
-                    styles = Arc::new(Mutex::new(xml));
-                } else if name == SHARED_STRINGS_FILENAME {
-                    shared_strings = Arc::new(Mutex::new(xml));
-                }
-            } else if name.ends_with(XML_RELS_SUFFIX) {
-                if name.starts_with(WORKBOOK_RELS_PREFIX) {
+                if name.ends_with(XML_SUFFIX) {
                     let mut contents: String = String::new();
                     file.read_to_string(&mut contents).unwrap();
-                    rels.insert(name, Xml::new(&contents));
-                } else if name.starts_with(WORKSHEETS_RELS_PREFIX) {
-                    let mut contents: String = String::new();
-                    file.read_to_string(&mut contents).unwrap();
-                    sheet_rels.insert(name, Xml::new(&contents));
+                    let xml = Xml::new(&contents);
+
+                    if name.starts_with(DRAWINGS_PREFIX) {
+                        drawings.insert(name, xml);
+                    } else if name.starts_with(TABLES_PREFIX) {
+                        tables.insert(name, xml);
+                    } else if name.starts_with(PIVOT_TABLES_PREFIX) {
+                        pivot_tables.insert(name, xml);
+                    } else if name.starts_with(PIVOT_CACHES_PREFIX) {
+                        pivot_caches.insert(name, xml);
+                    } else if name.starts_with(THEME_PREFIX) {
+                        themes.insert(name, xml);
+                    } else if name.starts_with(WORKSHEETS_PREFIX) {
+                        worksheets.insert(name, Arc::new(Mutex::new(xml)));
+                    } else if name == WORKBOOK_FILENAME {
+                        workbook = xml;
+                    } else if name == STYLES_FILENAME {
+                        styles = Arc::new(Mutex::new(xml));
+                    } else if name == SHARED_STRINGS_FILENAME {
+                        shared_strings = Arc::new(Mutex::new(xml));
+                    }
+                } else if name.ends_with(XML_RELS_SUFFIX) {
+                    if name.starts_with(WORKBOOK_RELS_PREFIX) {
+                        let mut contents: String = String::new();
+                        file.read_to_string(&mut contents).unwrap();
+                        rels.insert(name, Xml::new(&contents));
+                    } else if name.starts_with(WORKSHEETS_RELS_PREFIX) {
+                        let mut contents: String = String::new();
+                        file.read_to_string(&mut contents).unwrap();
+                        sheet_rels.insert(name, Xml::new(&contents));
+                    }
+                } else if name == VBA_PROJECT_FILENAME {
+                    let mut contents: Vec<u8> = Vec::new();
+                    file.read_to_end(&mut contents).unwrap();
+                    vba_project = Some(contents);
                 }
-            } else if name == VBA_PROJECT_FILENAME {
-                let mut contents: Vec<u8> = Vec::new();
-                file.read_to_end(&mut contents).unwrap();
-                vba_project = Some(contents);
+            }
+
+            Book {
+                path: path.to_string(),
+                rels,
+                drawings,
+                tables,
+                pivot_tables,
+                pivot_caches,
+                themes,
+                worksheets,
+                sheet_rels,
+                shared_strings,
+                styles,
+                workbook,
+                vba_project,
             }
         }
-
-        Book {
-            path: path.to_string(),
-            rels,
-            drawings,
-            tables,
-            pivot_tables,
-            pivot_caches,
-            themes,
-            worksheets,
-            sheet_rels,
-            shared_strings,
-            styles,
-            workbook,
-            vba_project,
-        }
     }
-}
 
     #[getter]
     pub fn sheetnames(&self) -> Vec<String> {
@@ -228,20 +229,19 @@ impl Book {
 
     pub fn add_table(&mut self, sheet_name: String, name: String, table_ref: String) {
         let table_id = self.tables.len() + 1;
-        let table_filename = format!("xl/tables/table{}.xml", table_id);
+        let table_filename = format!("xl/tables/table{table_id}.xml");
 
         let new_table_xml = Xml::new(&format!(
             r#"<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
-<table xmlns="http://schemas.openxmlformats.org/spreadsheetml/2006/main" id="{}" name="{}" displayName="{}" ref="{}" totalsRowShown="0">
-    <autoFilter ref="{}"/>
+<table xmlns="http://schemas.openxmlformats.org/spreadsheetml/2006/main" id="{table_id}" name="{name}" displayName="{name}" ref="{table_ref}" totalsRowShown="0">
+    <autoFilter ref="{table_ref}"/>
     <tableColumns count="3">
         <tableColumn id="1" name="Column1"/>
         <tableColumn id="2" name="Column2"/>
         <tableColumn id="3" name="Column3"/>
     </tableColumns>
     <tableStyleInfo name="TableStyleMedium2" showFirstColumn="0" showLastColumn="0" showRowStripes="1" showColumnStripes="0"/>
-</table>"#,
-            table_id, name, name, table_ref, table_ref
+</table>"#
         ));
         self.tables.insert(table_filename.clone(), new_table_xml);
 
@@ -256,25 +256,31 @@ impl Book {
                 map.insert("count".to_string(), "1".to_string());
                 map
             },
-            children: vec![
-                XmlElement {
-                    name: "tablePart".to_string(),
-                    attributes: {
-                        let mut map = HashMap::new();
-                        map.insert("r:id".to_string(), format!("rId{}", table_id));
-                        map
-                    },
-                    children: Vec::new(),
-                    text: None,
-                }
-            ],
+            children: vec![XmlElement {
+                name: "tablePart".to_string(),
+                attributes: {
+                    let mut map = HashMap::new();
+                    map.insert("r:id".to_string(), format!("rId{table_id}"));
+                    map
+                },
+                children: Vec::new(),
+                text: None,
+            }],
             text: None,
         });
 
-        let rels_filename = format!("xl/worksheets/_rels/{}.rels", sheet_path.split('/').last().unwrap());
-        let rels = self.sheet_rels.entry(rels_filename).or_insert_with(|| Xml::new(&r#"<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
+        let rels_filename = format!(
+            "xl/worksheets/_rels/{}.rels",
+            sheet_path.split('/').next_back().unwrap()
+        );
+        let rels = self.sheet_rels.entry(rels_filename).or_insert_with(|| {
+            Xml::new(
+                &r#"<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
 <Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships">
-</Relationships>"#.to_string()));
+</Relationships>"#
+                    .to_string(),
+            )
+        });
 
         if rels.elements.is_empty() {
             rels.elements.push(XmlElement {
@@ -289,9 +295,16 @@ impl Book {
             name: "Relationship".to_string(),
             attributes: {
                 let mut map = HashMap::new();
-                map.insert("Id".to_string(), format!("rId{}", table_id));
-                map.insert("Type".to_string(), "http://schemas.openxmlformats.org/officeDocument/2006/relationships/table".to_string());
-                map.insert("Target".to_string(), format!("../tables/table{}.xml", table_id));
+                map.insert("Id".to_string(), format!("rId{table_id}"));
+                map.insert(
+                    "Type".to_string(),
+                    "http://schemas.openxmlformats.org/officeDocument/2006/relationships/table"
+                        .to_string(),
+                );
+                map.insert(
+                    "Target".to_string(),
+                    format!("../tables/table{table_id}.xml"),
+                );
                 map
             },
             children: Vec::new(),
@@ -541,7 +554,10 @@ impl Book {
     ) {
         let file_names: Vec<String> = archive.file_names().map(|s| s.to_string()).collect();
         for filename in file_names {
-            if !xmls.contains_key(&filename) && Some(filename.as_str()) != self.vba_project.as_ref().map(|_| VBA_PROJECT_FILENAME) {
+            if !xmls.contains_key(&filename)
+                && Some(filename.as_str())
+                    != self.vba_project.as_ref().map(|_| VBA_PROJECT_FILENAME)
+            {
                 let mut file: zip::read::ZipFile<'_> = archive.by_name(&filename).unwrap();
                 let mut contents: Vec<u8> = Vec::new();
                 file.read_to_end(&mut contents).unwrap();
@@ -556,7 +572,9 @@ impl Book {
         }
 
         if let Some(vba_project) = &self.vba_project {
-            zip_writer.start_file(VBA_PROJECT_FILENAME, *options).unwrap();
+            zip_writer
+                .start_file(VBA_PROJECT_FILENAME, *options)
+                .unwrap();
             zip_writer.write_all(vba_project).unwrap();
         }
     }

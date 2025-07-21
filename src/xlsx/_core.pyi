@@ -29,9 +29,35 @@ class Cell:
     @value.setter
     def value(self, value: str) -> None: ...
     @property
-    def font(self) -> Optional[Font]: ...
+    def font(self) -> Optional["Font"]: ...
     @font.setter
-    def font(self, font: Font) -> None: ...
+    def font(self, font: "Font") -> None: ...
+
+class Font:
+    name: Optional[str]
+    size: Optional[float]
+    bold: Optional[bool]
+    italic: Optional[bool]
+    color: Optional[str]
+    def __init__(
+        self,
+        name: Optional[str] = ...,
+        size: Optional[float] = ...,
+        bold: Optional[bool] = ...,
+        italic: Optional[bool] = ...,
+        color: Optional[str] = ...,
+    ) -> None: ...
+
+class PatternFill:
+    pattern_type: Optional[str]
+    fg_color: Optional[str]
+    bg_color: Optional[str]
+    def __init__(
+        self,
+        pattern_type: Optional[str] = ...,
+        fg_color: Optional[str] = ...,
+        bg_color: Optional[str] = ...,
+    ) -> None: ...
 
 class Xml: ...
 class XmlElement: ...

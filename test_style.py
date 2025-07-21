@@ -1,6 +1,7 @@
 import os
 from manage_xlsx import load_workbook, Book, Font, PatternFill
 
+
 def test_font_style():
     # Create a new workbook in memory
     book = Book()
@@ -27,6 +28,7 @@ def test_font_style():
     book.copy(test_file)
 
     print(f"Workbook '{test_file}' created. Please inspect it manually for styles.")
+
 
 if __name__ == "__main__":
     test_font_style()

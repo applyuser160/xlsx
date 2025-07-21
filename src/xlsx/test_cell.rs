@@ -129,10 +129,7 @@ mod tests {
         let sheet_reloaded = book_reloaded.__getitem__("シート1".to_string());
         let cell_reloaded = sheet_reloaded.__getitem__("E1");
         // Excel's serial value for 2024-01-01 12:30:00 is 45292.520833333336
-        assert_eq!(
-            cell_reloaded.value().unwrap(),
-            "45292.520833333336"
-        );
+        assert_eq!(cell_reloaded.value().unwrap(), "45292.520833333336");
 
         let _ = fs::remove_file(&book.path);
         let _ = fs::remove_file(copy_path);

@@ -81,14 +81,8 @@ pub struct Side {
 impl Side {
     #[new]
     #[pyo3(signature = (style=None, color=None))]
-    fn new(
-        style: Option<String>,
-        color: Option<String>,
-    ) -> Self {
-        Side {
-            style,
-            color,
-        }
+    fn new(style: Option<String>, color: Option<String>) -> Self {
+        Side { style, color }
     }
 }
 
