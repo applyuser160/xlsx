@@ -10,7 +10,7 @@ mod tests {
             let _ = fs::remove_file(&test_path);
         }
         fs::copy(original_path, &test_path).unwrap();
-        Book::new(test_path)
+        Book::new(&test_path)
     }
 
     fn cleanup(book: Book) {
@@ -22,7 +22,7 @@ mod tests {
         // 観点: Excelファイルの読み取り
 
         // Act
-        let book = Book::new("data/sample.xlsx".to_string());
+        let book = Book::new("data/sample.xlsx");
 
         // Assert
         let xml = book.worksheets.get("xl/worksheets/sheet1.xml").unwrap();
@@ -47,7 +47,7 @@ mod tests {
         book.copy(&copy_path);
 
         // Assert
-        let book_copied = Book::new(copy_path.clone());
+        let book_copied = Book::new(&copy_path);
         let xml_copied = book_copied
             .worksheets
             .get("xl/worksheets/sheet1.xml")
@@ -64,7 +64,7 @@ mod tests {
         // 観点: シート名一覧の取得
 
         // Act
-        let book = Book::new("data/sample.xlsx".to_string());
+        let book = Book::new("data/sample.xlsx");
         let sheetnames = book.sheetnames();
 
         // Assert
@@ -77,7 +77,7 @@ mod tests {
         // 観点: シート名の存在確認
 
         // Act
-        let book = Book::new("data/sample.xlsx".to_string());
+        let book = Book::new("data/sample.xlsx");
 
         // Assert
         assert!(book.__contains__("シート1".to_string()));
@@ -107,7 +107,7 @@ mod tests {
         // 観点: XMLの結合
 
         // Act
-        let book = Book::new("data/sample.xlsx".to_string());
+        let book = Book::new("data/sample.xlsx");
         let xmls = book.merge_xmls();
 
         // Assert
@@ -142,7 +142,7 @@ mod tests {
         // 観点: シートタグの取得
 
         // Act
-        let book = Book::new("data/sample.xlsx".to_string());
+        let book = Book::new("data/sample.xlsx");
         let sheet_tags = book.sheet_tags();
 
         // Assert
@@ -160,7 +160,7 @@ mod tests {
         // 観点: リレーションシップの取得
 
         // Act
-        let book = Book::new("data/sample.xlsx".to_string());
+        let book = Book::new("data/sample.xlsx");
         let relationships = book.get_relationships();
 
         // Assert
@@ -178,7 +178,7 @@ mod tests {
         // 観点: シートパスの取得
 
         // Act
-        let book = Book::new("data/sample.xlsx".to_string());
+        let book = Book::new("data/sample.xlsx");
         let sheet_paths = book.get_sheet_paths();
 
         // Assert

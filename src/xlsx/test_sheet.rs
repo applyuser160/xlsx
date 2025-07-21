@@ -5,7 +5,7 @@ mod tests {
     #[test]
     fn test_getitem() {
         // 観点: セルをA1表記で取得できるか
-        let book = Book::new("data/sample.xlsx".to_string());
+        let book = Book::new("data/sample.xlsx");
         let sheet = book.__getitem__("シート1".to_string());
 
         // Act
@@ -18,7 +18,7 @@ mod tests {
     #[test]
     fn test_cell() {
         // 観点: セルを行・列で取得できるか
-        let book = Book::new("data/sample.xlsx".to_string());
+        let book = Book::new("data/sample.xlsx");
         let sheet = book.__getitem__("シート1".to_string());
 
         // Act
