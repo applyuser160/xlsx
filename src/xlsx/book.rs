@@ -27,8 +27,6 @@ const TABLES_PREFIX: &str = "xl/tables/";
 const PIVOT_TABLES_PREFIX: &str = "xl/pivotTables/";
 const PIVOT_CACHES_PREFIX: &str = "xl/pivotCache/";
 
-const INIT_EXCEL_FILENAME: &str = "/src/xlsx/init.xlsx";
-
 #[pyclass]
 pub struct Book {
     #[pyo3(get, set)]
