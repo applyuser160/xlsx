@@ -1,6 +1,6 @@
 use std::collections::HashMap;
 use std::fs::{File, OpenOptions};
-use std::io::{Cursor, Read, Write};
+use std::io::{Read, Write};
 use std::sync::{Arc, Mutex};
 use zip::write::FileOptions;
 use zip::{ZipArchive, ZipWriter};
@@ -14,16 +14,20 @@ use crate::xml::{Xml, XmlElement};
 const XML_SUFFIX: &str = ".xml";
 /// リレーションシップファイルのサフィックス
 const XML_RELS_SUFFIX: &str = ".xml.rels";
+
+// Common File Paths
 /// VBAプロジェクトのファイル名
 const VBA_PROJECT_FILENAME: &str = "xl/vbaProject.bin";
-
 /// ワークブックXMLのファイル名
 const WORKBOOK_FILENAME: &str = "xl/workbook.xml";
 /// スタイルXMLのファイル名
 const STYLES_FILENAME: &str = "xl/styles.xml";
 /// 共有文字列XMLのファイル名
 const SHARED_STRINGS_FILENAME: &str = "xl/sharedStrings.xml";
+/// ワークブックリレーションシップXMLのファイル名
+const WORKBOOK_RELS_FILENAME: &str = "xl/_rels/workbook.xml.rels";
 
+// Directory Prefixes
 /// ワークブックリレーションシップのプレフィックス
 const WORKBOOK_RELS_PREFIX: &str = "xl/_rels/";
 /// ワークシートリレーションシップのプレフィックス
@@ -40,6 +44,11 @@ const TABLES_PREFIX: &str = "xl/tables/";
 const PIVOT_TABLES_PREFIX: &str = "xl/pivotTables/";
 /// ピボットキャッシュのプレフィックス
 const PIVOT_CACHES_PREFIX: &str = "xl/pivotCache/";
+
+// XML Namespaces
+const NS_MAIN: &str = "http://schemas.openxmlformats.org/spreadsheetml/2006/main";
+const NS_RELATIONSHIPS: &str = "http://schemas.openxmlformats.org/officeDocument/2006/relationships";
+const NS_PACKAGE_RELATIONSHIPS: &str = "http://schemas.openxmlformats.org/package/2006/relationships";
 
 /// Excelワークブックを表す
 #[pyclass]
@@ -108,7 +117,7 @@ impl Book {
     pub fn sheetnames(&self) -> Vec<String> {
         self.sheet_tags()
             .iter()
-            .map(|x| x.attributes.get("name").unwrap().clone())
+            .filter_map(|x| x.attributes.get("name").cloned())
             .collect()
     }
 
@@ -154,68 +163,49 @@ impl Book {
         let sheet_path = self.get_sheet_paths().get(&sheet_name).unwrap().clone();
         let sheet_xml = self.worksheets.get_mut(&sheet_path).unwrap();
         let mut sheet_xml_locked = sheet_xml.lock().unwrap();
-        let worksheet = &mut sheet_xml_locked.elements[0];
-        worksheet.children.push(XmlElement {
-            name: "tableParts".to_string(),
-            attributes: {
-                let mut map = HashMap::new();
-                map.insert("count".to_string(), "1".to_string());
-                map
-            },
-            children: vec![XmlElement {
-                name: "tablePart".to_string(),
-                attributes: {
-                    let mut map = HashMap::new();
-                    map.insert("r:id".to_string(), format!("rId{table_id}"));
-                    map
-                },
-                children: Vec::new(),
-                text: None,
-            }],
+        let worksheet = sheet_xml_locked.elements.first_mut().unwrap();
+        let table_parts = Self::get_mut_or_create(worksheet, "tableParts");
+        table_parts
+            .attributes
+            .insert("count".to_string(), "1".to_string());
+        let mut table_part = XmlElement {
+            name: "tablePart".to_string(),
+            attributes: HashMap::new(),
+            children: Vec::new(),
             text: None,
-        });
+        };
+        table_part
+            .attributes
+            .insert("r:id".to_string(), format!("rId{table_id}"));
+        table_parts.children.push(table_part);
 
         // ワークシートのリレーションシップにリレーションシップを追加
         let rels_filename = format!(
             "xl/worksheets/_rels/{}.rels",
             sheet_path.split('/').next_back().unwrap()
         );
-        let rels = self.sheet_rels.entry(rels_filename).or_insert_with(|| {
-            Xml::new(
-                r#"<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
-<Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships">
-</Relationships>"#,
-            )
-        });
-
-        if rels.elements.is_empty() {
-            rels.elements.push(XmlElement {
-                name: "Relationships".to_string(),
-                attributes: HashMap::new(),
-                children: Vec::new(),
-                text: None,
-            });
-        }
-        let relationships = &mut rels.elements[0];
-        relationships.children.push(XmlElement {
+        let rels = self
+            .sheet_rels
+            .entry(rels_filename)
+            .or_insert_with(|| Xml::new(""));
+        let relationships = Self::get_mut_or_create(rels.elements.first_mut().unwrap(), "Relationships");
+        let mut relationship = XmlElement {
             name: "Relationship".to_string(),
-            attributes: {
-                let mut map = HashMap::new();
-                map.insert("Id".to_string(), format!("rId{table_id}"));
-                map.insert(
-                    "Type".to_string(),
-                    "http://schemas.openxmlformats.org/officeDocument/2006/relationships/table"
-                        .to_string(),
-                );
-                map.insert(
-                    "Target".to_string(),
-                    format!("../tables/table{table_id}.xml"),
-                );
-                map
-            },
+            attributes: HashMap::new(),
             children: Vec::new(),
             text: None,
-        });
+        };
+        relationship
+            .attributes
+            .insert("Id".to_string(), format!("rId{table_id}"));
+        relationship
+            .attributes
+            .insert("Type".to_string(), format!("{NS_RELATIONSHIPS}/table"));
+        relationship.attributes.insert(
+            "Target".to_string(),
+            format!("../tables/table{table_id}.xml"),
+        );
+        relationships.children.push(relationship);
     }
 
     /// 名前でシートを削除
@@ -246,36 +236,29 @@ impl Book {
 
                 // workbook.xmlからsheetタグを削除し、r:idを取得
                 let mut rid_to_remove = String::new();
-                if let Some(workbook_tag) = self.workbook.elements.first_mut() {
-                    if let Some(sheets_tag) = workbook_tag
-                        .children
-                        .iter_mut()
-                        .find(|x| x.name == "sheets")
-                    {
-                        if let Some(sheet_element) = sheets_tag
-                            .children
-                            .iter()
-                            .find(|s| s.attributes.get("name") == Some(&sheet.name))
-                        {
-                            if let Some(rid) = sheet_element.attributes.get("r:id") {
-                                rid_to_remove = rid.clone();
-                            }
-                        }
-                        sheets_tag
-                            .children
-                            .retain(|s| s.attributes.get("name") != Some(&sheet.name));
+                let workbook_tag = self.workbook.elements.first_mut().unwrap();
+                let sheets_tag = Self::get_mut_or_create(workbook_tag, "sheets");
+
+                if let Some(sheet_element) = sheets_tag
+                    .children
+                    .iter()
+                    .find(|s| s.attributes.get("name") == Some(&sheet.name))
+                {
+                    if let Some(rid) = sheet_element.attributes.get("r:id") {
+                        rid_to_remove = rid.clone();
                     }
                 }
+                sheets_tag
+                    .children
+                    .retain(|s| s.attributes.get("name") != Some(&sheet.name));
 
                 // workbook.xml.relsからリレーションシップを削除
                 if !rid_to_remove.is_empty() {
-                    if let Some(workbook_rels) = self.rels.get_mut("xl/_rels/workbook.xml.rels") {
-                        if let Some(relationships_tag) = workbook_rels.elements.first_mut() {
-                            relationships_tag
-                                .children
-                                .retain(|r| r.attributes.get("Id") != Some(&rid_to_remove));
-                        }
-                    }
+                    let workbook_rels = self.rels.get_mut(WORKBOOK_RELS_FILENAME).unwrap();
+                    let relationships_tag = workbook_rels.elements.first_mut().unwrap();
+                    relationships_tag
+                        .children
+                        .retain(|r| r.attributes.get("Id") != Some(&rid_to_remove));
                 }
                 return;
             }
@@ -308,69 +291,54 @@ impl Book {
             .insert(sheet_path.clone(), arc_mutex_xml.clone());
 
         // workbook.xmlを更新して新しいシートを含める
-        if let Some(workbook_tag) = self.workbook.elements.first_mut() {
-            if let Some(sheets_tag) = workbook_tag
-                .children
-                .iter_mut()
-                .find(|x| x.name == "sheets")
-            {
-                // 新しいシート要素を作成
-                let mut sheet_element: XmlElement = XmlElement {
-                    name: "sheet".to_string(),
-                    attributes: HashMap::new(),
-                    children: Vec::new(),
-                    text: None,
-                };
+        let workbook_tag = self.workbook.elements.first_mut().unwrap();
+        let sheets_tag = Self::get_mut_or_create(workbook_tag, "sheets");
 
-                // 属性を追加
-                sheet_element
-                    .attributes
-                    .insert("name".to_string(), title.clone());
-                sheet_element
-                    .attributes
-                    .insert("sheetId".to_string(), next_sheet_id.to_string());
-                sheet_element
-                    .attributes
-                    .insert("r:id".to_string(), next_rid.clone());
+        // 新しいシート要素を作成
+        let mut sheet_element = XmlElement {
+            name: "sheet".to_string(),
+            attributes: HashMap::new(),
+            children: Vec::new(),
+            text: None,
+        };
+        sheet_element
+            .attributes
+            .insert("name".to_string(), title.clone());
+        sheet_element
+            .attributes
+            .insert("sheetId".to_string(), next_sheet_id.to_string());
+        sheet_element
+            .attributes
+            .insert("r:id".to_string(), next_rid.clone());
 
-                // 指定されたインデックスに挿入、または末尾に追加
-                if index < sheets_tag.children.len() {
-                    sheets_tag.children.insert(index, sheet_element);
-                } else {
-                    sheets_tag.children.push(sheet_element);
-                }
-            }
+        // 指定されたインデックスに挿入、または末尾に追加
+        if index < sheets_tag.children.len() {
+            sheets_tag.children.insert(index, sheet_element);
+        } else {
+            sheets_tag.children.push(sheet_element);
         }
 
         // workbook.xml.relsを更新してリレーションシップを含める
-        if let Some(workbook_rels) = self.rels.get_mut("xl/_rels/workbook.xml.rels") {
-            if let Some(relationships_tag) = workbook_rels.elements.first_mut() {
-                // 新しいリレーションシップ要素を作成
-                let mut relationship_element: XmlElement = XmlElement {
-                    name: "Relationship".to_string(),
-                    attributes: HashMap::new(),
-                    children: Vec::new(),
-                    text: None,
-                };
+        let workbook_rels = self.rels.get_mut(WORKBOOK_RELS_FILENAME).unwrap();
+        let relationships_tag = workbook_rels.elements.first_mut().unwrap();
 
-                // 属性を追加
-                relationship_element
-                    .attributes
-                    .insert("Id".to_string(), next_rid);
-                relationship_element.attributes.insert(
-                    "Type".to_string(),
-                    "http://schemas.openxmlformats.org/officeDocument/2006/relationships/worksheet"
-                        .to_string(),
-                );
-                relationship_element.attributes.insert(
-                    "Target".to_string(),
-                    format!("worksheets/sheet{next_sheet_id}.xml"),
-                );
-
-                // リレーションシップを追加
-                relationships_tag.children.push(relationship_element);
-            }
-        }
+        let mut relationship_element = XmlElement {
+            name: "Relationship".to_string(),
+            attributes: HashMap::new(),
+            children: Vec::new(),
+            text: None,
+        };
+        relationship_element
+            .attributes
+            .insert("Id".to_string(), next_rid);
+        relationship_element
+            .attributes
+            .insert("Type".to_string(), format!("{NS_RELATIONSHIPS}/worksheet"));
+        relationship_element.attributes.insert(
+            "Target".to_string(),
+            format!("worksheets/sheet{next_sheet_id}.xml"),
+        );
+        relationships_tag.children.push(relationship_element);
 
         // Sheetオブジェクトを作成して返す
         Sheet::new(
@@ -416,29 +384,36 @@ impl Book {
     /// 新しい空のワークブックを作成
     fn new_workbook() -> Self {
         let mut rels: HashMap<String, Xml> = HashMap::new();
-        let workbook_rels = r#"<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
-<Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships">
-</Relationships>"#;
-        rels.insert(
-            "xl/_rels/workbook.xml.rels".to_string(),
-            Xml::new(workbook_rels),
+        let workbook_rels = format!(
+            r#"<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
+<Relationships xmlns="{NS_PACKAGE_RELATIONSHIPS}">
+</Relationships>"#
         );
+        rels.insert(WORKBOOK_RELS_FILENAME.to_string(), Xml::new(&workbook_rels));
 
-        let workbook_xml = r#"<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
-<workbook xmlns="http://schemas.openxmlformats.org/spreadsheetml/2006/main" xmlns:r="http://schemas.openxmlformats.org/officeDocument/2006/relationships">
+        let workbook_xml = format!(
+            r#"<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
+<workbook xmlns="{NS_MAIN}" xmlns:r="{NS_RELATIONSHIPS}">
 <sheets>
 </sheets>
-</workbook>"#;
+</workbook>"#
+        );
 
-        let styles_xml = r#"<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
-<styleSheet xmlns="http://schemas.openxmlformats.org/spreadsheetml/2006/main">
+        let styles_xml = format!(
+            r#"<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
+<styleSheet xmlns="{NS_MAIN}">
 <fonts count="1"><font><sz val="11"/><color theme="1"/><name val="Calibri"/></font></fonts>
 <fills count="2"><fill><patternFill patternType="none"/></fill><fill><patternFill patternType="gray125"/></fill></fills>
 <borders count="1"><border><left/><right/><top/><bottom/><diagonal/></border></borders>
 <cellStyleXfs count="1"><xf numFmtId="0" fontId="0" fillId="0" borderId="0"/></cellStyleXfs>
 <cellXfs count="1"><xf numFmtId="0" fontId="0" fillId="0" borderId="0" xfId="0"/></cellXfs>
 <cellStyles count="1"><cellStyle name="Normal" xfId="0" builtinId="0"/></cellStyles>
-</styleSheet>"#;
+</styleSheet>"#
+        );
+
+        let shared_strings_xml = format!(
+            r#"<?xml version="1.0" encoding="UTF-8" standalone="yes"?><sst xmlns="{NS_MAIN}" count="0" uniqueCount="0"></sst>"#
+        );
 
         Book {
             path: "".to_string(),
@@ -450,122 +425,96 @@ impl Book {
             themes: HashMap::new(),
             worksheets: HashMap::new(),
             sheet_rels: HashMap::new(),
-            shared_strings: Arc::new(Mutex::new(Xml::new(
-                r#"<?xml version="1.0" encoding="UTF-8" standalone="yes"?><sst xmlns="http://schemas.openxmlformats.org/spreadsheetml/2006/main" count="0" uniqueCount="0"></sst>"#,
-            ))),
-            styles: Arc::new(Mutex::new(Xml::new(styles_xml))),
-            workbook: Xml::new(workbook_xml),
+            shared_strings: Arc::new(Mutex::new(Xml::new(&shared_strings_xml))),
+            styles: Arc::new(Mutex::new(Xml::new(&styles_xml))),
+            workbook: Xml::new(&workbook_xml),
             vba_project: None,
         }
     }
 
     /// ファイルからワークブックを読み込み
     fn from_file(path: &str) -> Self {
-        let file_result: Result<File, std::io::Error> = File::open(path);
-        if file_result.is_err() {
-            panic!("File not found: {path}");
-        }
-        let file = file_result.unwrap();
-        let mut archive: ZipArchive<File> = ZipArchive::new(file).unwrap();
+        let mut archive = Self::read_zip_archive(path).unwrap();
+        let mut book = Self::new_workbook();
+        book.path = path.to_string();
 
-        let mut rels: HashMap<String, Xml> = HashMap::new();
-        let mut drawings: HashMap<String, Xml> = HashMap::new();
-        let mut tables: HashMap<String, Xml> = HashMap::new();
-        let mut pivot_tables: HashMap<String, Xml> = HashMap::new();
-        let mut pivot_caches: HashMap<String, Xml> = HashMap::new();
-        let mut themes: HashMap<String, Xml> = HashMap::new();
-        let mut worksheets: HashMap<String, Arc<Mutex<Xml>>> = HashMap::new();
-        let mut sheet_rels: HashMap<String, Xml> = HashMap::new();
-        let mut shared_strings: Arc<Mutex<Xml>> = Arc::new(Mutex::new(Xml::new("")));
-        let mut styles: Arc<Mutex<Xml>> = Arc::new(Mutex::new(Xml::new("")));
-        let mut workbook: Xml = Xml::new("");
-        let mut vba_project: Option<Vec<u8>> = None;
-
-        // zipアーカイブからすべてのファイルを読み込み
         for i in 0..archive.len() {
-            let mut file: zip::read::ZipFile<'_> = archive.by_index(i).unwrap();
-            let name: String = file.name().to_string();
-
-            if name.ends_with(XML_SUFFIX) {
-                // XMLファイルを読み込み
-                let mut contents: String = String::new();
-                file.read_to_string(&mut contents).unwrap();
-                let xml = Xml::new(&contents);
-
-                if name.starts_with(DRAWINGS_PREFIX) {
-                    drawings.insert(name, xml);
-                } else if name.starts_with(TABLES_PREFIX) {
-                    tables.insert(name, xml);
-                } else if name.starts_with(PIVOT_TABLES_PREFIX) {
-                    pivot_tables.insert(name, xml);
-                } else if name.starts_with(PIVOT_CACHES_PREFIX) {
-                    pivot_caches.insert(name, xml);
-                } else if name.starts_with(THEME_PREFIX) {
-                    themes.insert(name, xml);
-                } else if name.starts_with(WORKSHEETS_PREFIX) {
-                    worksheets.insert(name, Arc::new(Mutex::new(xml)));
-                } else if name == WORKBOOK_FILENAME {
-                    workbook = xml;
-                } else if name == STYLES_FILENAME {
-                    styles = Arc::new(Mutex::new(xml));
-                } else if name == SHARED_STRINGS_FILENAME {
-                    shared_strings = Arc::new(Mutex::new(xml));
-                }
-            } else if name.ends_with(XML_RELS_SUFFIX) {
-                // リレーションシップファイルを読み込み
-                if name.starts_with(WORKBOOK_RELS_PREFIX) {
-                    let mut contents: String = String::new();
-                    file.read_to_string(&mut contents).unwrap();
-                    rels.insert(name, Xml::new(&contents));
-                } else if name.starts_with(WORKSHEETS_RELS_PREFIX) {
-                    let mut contents: String = String::new();
-                    file.read_to_string(&mut contents).unwrap();
-                    sheet_rels.insert(name, Xml::new(&contents));
-                }
-            } else if name == VBA_PROJECT_FILENAME {
-                // VBAプロジェクトを読み込み
-                let mut contents: Vec<u8> = Vec::new();
-                file.read_to_end(&mut contents).unwrap();
-                vba_project = Some(contents);
-            }
+            let mut file = archive.by_index(i).unwrap();
+            let name = file.name().to_string();
+            Self::process_zip_entry(&mut book, &name, &mut file);
         }
+        book
+    }
 
-        Book {
-            path: path.to_string(),
-            rels,
-            drawings,
-            tables,
-            pivot_tables,
-            pivot_caches,
-            themes,
-            worksheets,
-            sheet_rels,
-            shared_strings,
-            styles,
-            workbook,
-            vba_project,
+    fn read_zip_archive(path: &str) -> Result<ZipArchive<File>, std::io::Error> {
+        let file = File::open(path)?;
+        ZipArchive::new(file).map_err(|e| std::io::Error::new(std::io::ErrorKind::Other, e))
+    }
+
+    fn process_zip_entry(book: &mut Book, name: &str, file: &mut zip::read::ZipFile) {
+        if name.ends_with(XML_SUFFIX) {
+            let mut contents = String::new();
+            file.read_to_string(&mut contents).unwrap();
+            let xml = Xml::new(&contents);
+            Self::dispatch_xml(book, name, xml);
+        } else if name.ends_with(XML_RELS_SUFFIX) {
+            let mut contents = String::new();
+            file.read_to_string(&mut contents).unwrap();
+            let xml = Xml::new(&contents);
+            Self::dispatch_rels(book, name, xml);
+        } else if name == VBA_PROJECT_FILENAME {
+            let mut contents = Vec::new();
+            file.read_to_end(&mut contents).unwrap();
+            book.vba_project = Some(contents);
+        }
+    }
+
+    fn dispatch_xml(book: &mut Book, name: &str, xml: Xml) {
+        if name.starts_with(DRAWINGS_PREFIX) {
+            book.drawings.insert(name.to_string(), xml);
+        } else if name.starts_with(TABLES_PREFIX) {
+            book.tables.insert(name.to_string(), xml);
+        } else if name.starts_with(PIVOT_TABLES_PREFIX) {
+            book.pivot_tables.insert(name.to_string(), xml);
+        } else if name.starts_with(PIVOT_CACHES_PREFIX) {
+            book.pivot_caches.insert(name.to_string(), xml);
+        } else if name.starts_with(THEME_PREFIX) {
+            book.themes.insert(name.to_string(), xml);
+        } else if name.starts_with(WORKSHEETS_PREFIX) {
+            book.worksheets
+                .insert(name.to_string(), Arc::new(Mutex::new(xml)));
+        } else if name == WORKBOOK_FILENAME {
+            book.workbook = xml;
+        } else if name == STYLES_FILENAME {
+            book.styles = Arc::new(Mutex::new(xml));
+        } else if name == SHARED_STRINGS_FILENAME {
+            book.shared_strings = Arc::new(Mutex::new(xml));
+        }
+    }
+
+    fn dispatch_rels(book: &mut Book, name: &str, xml: Xml) {
+        if name.starts_with(WORKBOOK_RELS_PREFIX) {
+            book.rels.insert(name.to_string(), xml);
+        } else if name.starts_with(WORKSHEETS_RELS_PREFIX) {
+            book.sheet_rels.insert(name.to_string(), xml);
         }
     }
 
     /// ワークブックを元のファイルパスに保存
     pub fn save(&self) {
-        let file: File = File::open(&self.path).unwrap();
-        let mut archive: ZipArchive<File> = ZipArchive::new(file).unwrap();
-
-        let mut buffer: Cursor<Vec<u8>> = Cursor::new(Vec::new());
-        let mut zip_writer: ZipWriter<&mut Cursor<Vec<u8>>> = ZipWriter::new(&mut buffer);
-        let options: FileOptions =
-            FileOptions::default().compression_method(zip::CompressionMethod::Stored);
-
-        // 構造体からすべてのXMLファイルをマージ
-        let xmls: HashMap<String, Xml> = self.merge_xmls();
-
-        self.write_file(&mut archive, &xmls, &mut zip_writer, &options);
+        if self.path.is_empty() {
+            panic!("Cannot save a new workbook without a path. Use copy() instead.");
+        }
+        self.copy(&self.path.clone());
     }
 
     /// 構造体からすべてのXMLファイルを1つのHashMapにマージ
     pub fn merge_xmls(&self) -> HashMap<String, Xml> {
-        let mut xmls: HashMap<String, Xml> = self.rels.clone();
+        let mut xmls = HashMap::new();
+
+        for (k, v) in &self.rels {
+            xmls.insert(k.clone(), v.clone());
+        }
         xmls.insert(WORKBOOK_FILENAME.to_string(), self.workbook.clone());
         xmls.insert(
             STYLES_FILENAME.to_string(),
@@ -575,19 +524,29 @@ impl Book {
             SHARED_STRINGS_FILENAME.to_string(),
             self.shared_strings.lock().unwrap().clone(),
         );
-        xmls.extend(self.drawings.clone());
-        xmls.extend(self.tables.clone());
-        xmls.extend(self.pivot_tables.clone());
-        xmls.extend(self.pivot_caches.clone());
-        xmls.extend(self.sheet_rels.clone());
-
-        // Arc<Mutex<Xml>> から Xml を取得
+        for (k, v) in &self.drawings {
+            xmls.insert(k.clone(), v.clone());
+        }
+        for (k, v) in &self.tables {
+            xmls.insert(k.clone(), v.clone());
+        }
+        for (k, v) in &self.pivot_tables {
+            xmls.insert(k.clone(), v.clone());
+        }
+        for (k, v) in &self.pivot_caches {
+            xmls.insert(k.clone(), v.clone());
+        }
+        for (k, v) in &self.sheet_rels {
+            xmls.insert(k.clone(), v.clone());
+        }
+        for (k, v) in &self.themes {
+            xmls.insert(k.clone(), v.clone());
+        }
         for (key, arc_mutex_xml) in &self.worksheets {
-            let xml: Xml = arc_mutex_xml.lock().unwrap().clone();
+            let xml = arc_mutex_xml.lock().unwrap().clone();
             xmls.insert(key.clone(), xml);
         }
 
-        xmls.extend(self.themes.clone());
         xmls
     }
 
@@ -641,7 +600,7 @@ impl Book {
 
     /// `xl/workbook.xml.rels` からリレーションシップのリストを取得
     pub fn get_relationships(&self) -> Vec<XmlElement> {
-        if let Some(workbook_xml_rels) = self.rels.get("xl/_rels/workbook.xml.rels") {
+        if let Some(workbook_xml_rels) = self.rels.get(WORKBOOK_RELS_FILENAME) {
             if let Some(workbook_tag) = workbook_xml_rels.elements.first() {
                 return workbook_tag.children.clone();
             }
@@ -651,30 +610,26 @@ impl Book {
 
     /// シート名とそのパスのマップを取得
     pub fn get_sheet_paths(&self) -> HashMap<String, String> {
-        let mut result: HashMap<String, String> = HashMap::new();
-        let sheet_tags: Vec<XmlElement> = self.sheet_tags();
-        let relationships: Vec<XmlElement> = self.get_relationships().clone();
+        let relationships = self.get_relationships();
         let sheet_paths: HashMap<String, String> = relationships
-            .into_iter()
-            .map(|x: XmlElement| {
-                (
-                    x.attributes.get("Id").unwrap().clone(),
-                    x.attributes.get("Target").unwrap().clone(),
-                )
+            .iter()
+            .filter_map(|rel| {
+                let id = rel.attributes.get("Id")?.clone();
+                let target = rel.attributes.get("Target")?.clone();
+                Some((id, target))
             })
             .collect();
-        for sheet_tag in sheet_tags {
-            let id: &str = sheet_tag.attributes.get("r:id").unwrap().as_str();
-            let sheet_path: &String = sheet_paths.get(id).unwrap();
-            let trimmed_path = sheet_path
-                .trim_start_matches("/xl/")
-                .trim_start_matches("xl/");
-            result.insert(
-                sheet_tag.attributes.get("name").unwrap().clone(),
-                format!("xl/{trimmed_path}"),
-            );
-        }
-        result
+
+        self.sheet_tags()
+            .iter()
+            .filter_map(|sheet_tag| {
+                let name = sheet_tag.attributes.get("name")?.clone();
+                let r_id = sheet_tag.attributes.get("r:id")?;
+                let path = sheet_paths.get(r_id)?;
+                let trimmed_path = path.trim_start_matches("/xl/").trim_start_matches("xl/");
+                Some((name, format!("xl/{trimmed_path}")))
+            })
+            .collect()
     }
 
     /// 名前でシートを取得
@@ -691,5 +646,23 @@ impl Book {
             }
         }
         None
+    }
+
+    fn get_mut_or_create<'a>(
+        parent: &'a mut XmlElement,
+        name: &str,
+    ) -> &'a mut XmlElement {
+        if let Some(pos) = parent.children.iter().position(|c| c.name == name) {
+            &mut parent.children[pos]
+        } else {
+            let new_element = XmlElement {
+                name: name.to_string(),
+                attributes: HashMap::new(),
+                children: Vec::new(),
+                text: None,
+            };
+            parent.children.push(new_element);
+            parent.children.last_mut().unwrap()
+        }
     }
 }
