@@ -10,7 +10,7 @@ mod tests {
             let _ = fs::remove_file(&test_path);
         }
         fs::copy(original_path, &test_path).unwrap();
-        Book::new(&test_path)
+        Book::from_path(&test_path).unwrap()
     }
 
     fn cleanup(book: Book) {
@@ -22,7 +22,7 @@ mod tests {
         // 観点: Excelファイルの読み取り
 
         // Act
-        let book = Book::new("data/sample.xlsx");
+        let book = Book::from_path("data/sample.xlsx").unwrap();
 
         // Assert
         let xml = book.worksheets.get("xl/worksheets/sheet1.xml").unwrap();
@@ -47,7 +47,7 @@ mod tests {
         book.copy(&copy_path);
 
         // Assert
-        let book_copied = Book::new(&copy_path);
+        let book_copied = Book::from_path(&copy_path).unwrap();
         let xml_copied = book_copied
             .worksheets
             .get("xl/worksheets/sheet1.xml")
@@ -64,7 +64,7 @@ mod tests {
         // 観点: シート名一覧の取得
 
         // Act
-        let book = Book::new("data/sample.xlsx");
+        let book = Book::from_path("data/sample.xlsx").unwrap();
         let sheetnames = book.sheetnames();
 
         // Assert
@@ -77,11 +77,11 @@ mod tests {
         // 観点: シート名の存在確認
 
         // Act
-        let book = Book::new("data/sample.xlsx");
+        let book = Book::from_path("data/sample.xlsx").unwrap();
 
         // Assert
-        assert!(book.__contains__("シート1".to_string()));
-        assert!(!book.__contains__("存在しないシート".to_string()));
+        assert!(book.__contains__("シート1"));
+        assert!(!book.__contains__("存在しないシート"));
     }
 
     #[test]
@@ -98,7 +98,7 @@ mod tests {
         // Assert
         assert_eq!(sheet.name, "TestSheet");
         assert_eq!(book.sheetnames().len(), sheet_count_before + 1);
-        assert!(book.__contains__("TestSheet".to_string()));
+        assert!(book.__contains__("TestSheet"));
         cleanup(book);
     }
 
@@ -107,7 +107,7 @@ mod tests {
         // 観点: XMLの結合
 
         // Act
-        let book = Book::new("data/sample.xlsx");
+        let book = Book::from_path("data/sample.xlsx").unwrap();
         let xmls = book.merge_xmls();
 
         // Assert
@@ -142,7 +142,7 @@ mod tests {
         // 観点: シートタグの取得
 
         // Act
-        let book = Book::new("data/sample.xlsx");
+        let book = Book::from_path("data/sample.xlsx").unwrap();
         let sheet_tags = book.sheet_tags();
 
         // Assert
@@ -160,7 +160,7 @@ mod tests {
         // 観点: リレーションシップの取得
 
         // Act
-        let book = Book::new("data/sample.xlsx");
+        let book = Book::from_path("data/sample.xlsx").unwrap();
         let relationships = book.get_relationships();
 
         // Assert
@@ -178,7 +178,7 @@ mod tests {
         // 観点: シートパスの取得
 
         // Act
-        let book = Book::new("data/sample.xlsx");
+        let book = Book::from_path("data/sample.xlsx").unwrap();
         let sheet_paths = book.get_sheet_paths();
 
         // Assert
@@ -199,15 +199,14 @@ mod tests {
         // 観点: シートを削除できるか
         let mut book = setup_book("delete_sheet");
         let sheet_count_before = book.sheetnames().len();
-        assert!(book.__contains__("シート1".to_string()));
+        assert!(book.__contains__("シート1"));
 
         // Act
-        let sheet_to_delete = book.__getitem__("シート1".to_string());
-        book.__delitem__(sheet_to_delete.name.clone());
+        book.__delitem__("シート1").unwrap();
 
         // Assert
         assert_eq!(book.sheetnames().len(), sheet_count_before - 1);
-        assert!(!book.__contains__("シート1".to_string()));
+        assert!(!book.__contains__("シート1"));
 
         cleanup(book);
     }
@@ -216,7 +215,7 @@ mod tests {
     fn test_sheet_index() {
         // 観点: シートのインデックスを取得できるか
         let book = setup_book("sheet_index");
-        let sheet = book.__getitem__("シート1".to_string());
+        let sheet = book.__getitem__("シート1").unwrap();
 
         // Act
         let index = book.index(&sheet);
@@ -259,8 +258,7 @@ mod tests {
 
         // Assert
         assert!(book.tables.contains_key("xl/tables/table1.xml"));
-        let sheet = book.get_sheet_by_name("シート1").unwrap();
-        let sheet_xml_arc = sheet.get_xml();
+        let sheet_xml_arc = book.worksheets.get("xl/worksheets/sheet1.xml").unwrap();
         let sheet_xml = sheet_xml_arc.lock().unwrap();
         let table_parts = sheet_xml.elements[0]
             .children
