@@ -176,7 +176,7 @@ mod tests {
         // Assert
         let book_reloaded = Book::new(&copy_path);
         let sheet_reloaded = book_reloaded.__getitem__("シート1".to_string());
-        let cell_reloaded = sheet_reloaded.__getitem__("H1");
+        let _cell_reloaded = sheet_reloaded.__getitem__("H1");
         // TODO: 実際に計算された値を取得する方法は未実装
         // とりあえず、数式が設定されているかを確認
         // assert_eq!(cell_reloaded.formula().unwrap(), "SUM(A1:A2)");

@@ -1,22 +1,29 @@
 use pyo3::prelude::*;
 
+/// セルのフォントプロパティを表す
 #[pyclass]
 #[derive(Clone, Debug, PartialEq, Default)]
 pub struct Font {
+    /// フォント名
     #[pyo3(get, set)]
     pub name: Option<String>,
+    /// フォントサイズ
     #[pyo3(get, set)]
     pub size: Option<f64>,
+    /// 太字かどうか
     #[pyo3(get, set)]
     pub bold: Option<bool>,
+    /// 斜体かどうか
     #[pyo3(get, set)]
     pub italic: Option<bool>,
+    /// ARGB形式のフォントの色 (例: "FF000000")
     #[pyo3(get, set)]
     pub color: Option<String>,
 }
 
 #[pymethods]
 impl Font {
+    /// 新しい `Font` インスタンスを作成
     #[new]
     #[pyo3(signature = (name=None, size=None, bold=None, italic=None, color=None))]
     fn new(
@@ -36,21 +43,27 @@ impl Font {
     }
 }
 
+/// セルの罫線プロパティを表す
 #[pyclass]
 #[derive(Clone, Debug, PartialEq, Default)]
 pub struct Border {
+    /// 左罫線
     #[pyo3(get, set)]
     pub left: Option<Side>,
+    /// 右罫線
     #[pyo3(get, set)]
     pub right: Option<Side>,
+    /// 上罫線
     #[pyo3(get, set)]
     pub top: Option<Side>,
+    /// 下罫線
     #[pyo3(get, set)]
     pub bottom: Option<Side>,
 }
 
 #[pymethods]
 impl Border {
+    /// 新しい `Border` インスタンスを作成
     #[new]
     #[pyo3(signature = (left=None, right=None, top=None, bottom=None))]
     fn new(
@@ -68,17 +81,21 @@ impl Border {
     }
 }
 
+/// 1つの罫線のプロパティを表す
 #[pyclass]
 #[derive(Clone, Debug, PartialEq, Default)]
 pub struct Side {
+    /// 罫線のスタイル (例: "thin", "medium", "thick")
     #[pyo3(get, set)]
     pub style: Option<String>,
+    /// ARGB形式の罫線の色
     #[pyo3(get, set)]
     pub color: Option<String>,
 }
 
 #[pymethods]
 impl Side {
+    /// 新しい `Side` インスタンスを作成
     #[new]
     #[pyo3(signature = (style=None, color=None))]
     fn new(style: Option<String>, color: Option<String>) -> Self {
@@ -86,19 +103,24 @@ impl Side {
     }
 }
 
+/// セルの塗りつぶしパターンプロパティを表す
 #[pyclass]
 #[derive(Clone, Debug, PartialEq, Default)]
 pub struct PatternFill {
+    /// パターンの種類 (例: "solid", "gray125")
     #[pyo3(get, set)]
     pub pattern_type: Option<String>,
+    /// ARGB形式の前面色
     #[pyo3(get, set)]
     pub fg_color: Option<String>,
+    /// ARGB形式の背景色
     #[pyo3(get, set)]
     pub bg_color: Option<String>,
 }
 
 #[pymethods]
 impl PatternFill {
+    /// 新しい `PatternFill` インスタンスを作成
     #[new]
     #[pyo3(signature = (pattern_type=None, fg_color=None, bg_color=None))]
     fn new(
