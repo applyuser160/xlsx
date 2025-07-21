@@ -1,8 +1,8 @@
 use crate::style::{Font, PatternFill};
 use crate::xml::{Xml, XmlElement};
-use chrono::NaiveDateTime;
+use chrono::{NaiveDate, NaiveDateTime};
 use pyo3::prelude::*;
-use std::sync::{Arc, Mutex};
+use std::sync::{Arc, Mutex, MutexGuard};
 
 /// ワークシートの単一セル
 #[pyclass]
@@ -26,9 +26,9 @@ impl Cell {
     /// セルの値の取得
     #[getter]
     pub fn value(&self) -> Option<String> {
-        let xml = self.sheet_xml.lock().unwrap();
-        let worksheet = xml.elements.first()?;
-        let sheet_data = worksheet.children.iter().find(|e| e.name == "sheetData")?;
+        let xml: MutexGuard<Xml> = self.sheet_xml.lock().unwrap();
+        let worksheet: &XmlElement = xml.elements.first()?;
+        let sheet_data: &XmlElement = worksheet.children.iter().find(|e| e.name == "sheetData")?;
 
         sheet_data
             .children
@@ -67,11 +67,11 @@ impl Cell {
     #[setter]
     fn set_font(&mut self, font: Font) {
         self.font = Some(font.clone());
-        let font_id = self.add_font_to_styles(&font);
-        let fill_id = self.add_fill_to_styles(&self.fill.clone().unwrap_or_default());
-        let xf_id = self.add_xf_to_styles(font_id, fill_id, 0, 0);
-        let mut xml = self.sheet_xml.lock().unwrap();
-        let cell_element = self.get_or_create_cell_element(&mut xml);
+        let font_id: usize = self.add_font_to_styles(&font);
+        let fill_id: usize = self.add_fill_to_styles(&self.fill.clone().unwrap_or_default());
+        let xf_id: usize = self.add_xf_to_styles(font_id, fill_id, 0, 0);
+        let mut xml: MutexGuard<Xml> = self.sheet_xml.lock().unwrap();
+        let cell_element: &mut XmlElement = self.get_or_create_cell_element(&mut xml);
         cell_element
             .attributes
             .insert("s".to_string(), xf_id.to_string());
@@ -87,11 +87,11 @@ impl Cell {
     #[setter]
     fn set_fill(&mut self, fill: PatternFill) {
         self.fill = Some(fill.clone());
-        let font_id = self.add_font_to_styles(&self.font.clone().unwrap_or_default());
-        let fill_id = self.add_fill_to_styles(&fill);
-        let xf_id = self.add_xf_to_styles(font_id, fill_id, 0, 0);
-        let mut xml = self.sheet_xml.lock().unwrap();
-        let cell_element = self.get_or_create_cell_element(&mut xml);
+        let font_id: usize = self.add_font_to_styles(&self.font.clone().unwrap_or_default());
+        let fill_id: usize = self.add_fill_to_styles(&fill);
+        let xf_id: usize = self.add_xf_to_styles(font_id, fill_id, 0, 0);
+        let mut xml: MutexGuard<Xml> = self.sheet_xml.lock().unwrap();
+        let cell_element: &mut XmlElement = self.get_or_create_cell_element(&mut xml);
         cell_element
             .attributes
             .insert("s".to_string(), xf_id.to_string());
@@ -131,28 +131,28 @@ impl Cell {
 
     /// 共有文字列の値の取得
     fn get_shared_string_value(&self, cell_element: &XmlElement) -> Option<String> {
-        let v_element = cell_element.children.iter().find(|e| e.name == "v")?;
-        let idx = v_element.text.as_ref()?.parse::<usize>().ok()?;
-        let shared_strings_xml = self.shared_strings.lock().unwrap();
-        let sst = shared_strings_xml.elements.first()?;
-        let si = sst.children.get(idx)?;
+        let v_element: &XmlElement = cell_element.children.iter().find(|e| e.name == "v")?;
+        let idx: usize = v_element.text.as_ref()?.parse::<usize>().ok()?;
+        let shared_strings_xml: MutexGuard<Xml> = self.shared_strings.lock().unwrap();
+        let sst: &XmlElement = shared_strings_xml.elements.first()?;
+        let si: &XmlElement = sst.children.get(idx)?;
         si.children.first().and_then(|t| t.text.clone())
     }
 
     /// インライン文字列の値の取得
     fn get_inline_string_value(&self, cell_element: &XmlElement) -> Option<String> {
-        let is_element = cell_element.children.iter().find(|e| e.name == "is")?;
-        let t_element = is_element.children.iter().find(|e| e.name == "t")?;
+        let is_element: &XmlElement = cell_element.children.iter().find(|e| e.name == "is")?;
+        let t_element: &XmlElement = is_element.children.iter().find(|e| e.name == "t")?;
         t_element.text.clone()
     }
 
     /// スタイルXMLへのフォントの追加とフォントIDの返却
     fn add_font_to_styles(&self, font: &Font) -> usize {
-        let mut styles_xml = self.styles.lock().unwrap();
-        let fonts_tag = styles_xml.get_mut_or_create_child_by_tag("fonts");
+        let mut styles_xml: MutexGuard<Xml> = self.styles.lock().unwrap();
+        let fonts_tag: &mut XmlElement = styles_xml.get_mut_or_create_child_by_tag("fonts");
 
         if let Some(index) = fonts_tag.children.iter().position(|f| {
-            let mut existing_font = Font::default();
+            let mut existing_font: Font = Font::default();
             for child in &f.children {
                 match child.name.as_str() {
                     "name" => existing_font.name = child.attributes.get("val").cloned(),
@@ -171,16 +171,16 @@ impl Cell {
             return index;
         }
 
-        let mut font_element = XmlElement::new("font");
+        let mut font_element: XmlElement = XmlElement::new("font");
         if let Some(name) = &font.name {
-            let mut name_element = XmlElement::new("name");
+            let mut name_element: XmlElement = XmlElement::new("name");
             name_element
                 .attributes
                 .insert("val".to_string(), name.clone());
             font_element.children.push(name_element);
         }
         if let Some(size) = font.size {
-            let mut size_element = XmlElement::new("sz");
+            let mut size_element: XmlElement = XmlElement::new("sz");
             size_element
                 .attributes
                 .insert("val".to_string(), size.to_string());
@@ -193,7 +193,7 @@ impl Cell {
             font_element.children.push(XmlElement::new("i"));
         }
         if let Some(color) = &font.color {
-            let mut color_element = XmlElement::new("color");
+            let mut color_element: XmlElement = XmlElement::new("color");
             color_element
                 .attributes
                 .insert("rgb".to_string(), color.clone());
@@ -201,7 +201,7 @@ impl Cell {
         }
 
         fonts_tag.children.push(font_element);
-        let count = fonts_tag.children.len();
+        let count: usize = fonts_tag.children.len();
         fonts_tag
             .attributes
             .insert("count".to_string(), count.to_string());
@@ -210,11 +210,11 @@ impl Cell {
 
     /// スタイルXMLへの塗りつぶしの追加と塗りつぶしIDの返却
     fn add_fill_to_styles(&self, fill: &PatternFill) -> usize {
-        let mut styles_xml = self.styles.lock().unwrap();
-        let fills_tag = styles_xml.get_mut_or_create_child_by_tag("fills");
+        let mut styles_xml: MutexGuard<Xml> = self.styles.lock().unwrap();
+        let fills_tag: &mut XmlElement = styles_xml.get_mut_or_create_child_by_tag("fills");
 
-        let mut fill_element = XmlElement::new("fill");
-        let mut pattern_fill_element = XmlElement::new("patternFill");
+        let mut fill_element: XmlElement = XmlElement::new("fill");
+        let mut pattern_fill_element: XmlElement = XmlElement::new("patternFill");
 
         if let Some(pattern_type) = &fill.pattern_type {
             pattern_fill_element
@@ -222,14 +222,14 @@ impl Cell {
                 .insert("patternType".to_string(), pattern_type.clone());
         }
         if let Some(fg_color) = &fill.fg_color {
-            let mut fg_color_element = XmlElement::new("fgColor");
+            let mut fg_color_element: XmlElement = XmlElement::new("fgColor");
             fg_color_element
                 .attributes
                 .insert("rgb".to_string(), fg_color.clone());
             pattern_fill_element.children.push(fg_color_element);
         }
         if let Some(bg_color) = &fill.bg_color {
-            let mut bg_color_element = XmlElement::new("bgColor");
+            let mut bg_color_element: XmlElement = XmlElement::new("bgColor");
             bg_color_element
                 .attributes
                 .insert("rgb".to_string(), bg_color.clone());
@@ -243,7 +243,7 @@ impl Cell {
         }
 
         fills_tag.children.push(fill_element);
-        let count = fills_tag.children.len();
+        let count: usize = fills_tag.children.len();
         fills_tag
             .attributes
             .insert("count".to_string(), count.to_string());
@@ -258,12 +258,12 @@ impl Cell {
         border_id: usize,
         alignment_id: usize,
     ) -> usize {
-        let mut styles_xml = self.styles.lock().unwrap();
-        let cell_xfs_tag = styles_xml.get_mut_or_create_child_by_tag("cellXfs");
+        let mut styles_xml: MutexGuard<Xml> = self.styles.lock().unwrap();
+        let cell_xfs_tag: &mut XmlElement = styles_xml.get_mut_or_create_child_by_tag("cellXfs");
 
         if let Some(index) = cell_xfs_tag.children.iter().position(|xf| {
-            let has_alignment = xf.children.iter().any(|c| c.name == "alignment");
-            let alignment_check =
+            let has_alignment: bool = xf.children.iter().any(|c| c.name == "alignment");
+            let alignment_check: bool =
                 (alignment_id > 0 && has_alignment) || (alignment_id == 0 && !has_alignment);
 
             xf.attributes.get("fontId") == Some(&font_id.to_string())
@@ -274,7 +274,7 @@ impl Cell {
             return index;
         }
 
-        let mut xf_element = XmlElement::new("xf");
+        let mut xf_element: XmlElement = XmlElement::new("xf");
         xf_element
             .attributes
             .insert("numFmtId".to_string(), "0".to_string());
@@ -309,7 +309,7 @@ impl Cell {
         }
 
         cell_xfs_tag.children.push(xf_element);
-        let count = cell_xfs_tag.children.len();
+        let count: usize = cell_xfs_tag.children.len();
         cell_xfs_tag
             .attributes
             .insert("count".to_string(), count.to_string());
@@ -318,14 +318,14 @@ impl Cell {
 
     /// セルの値の数値としての設定
     pub fn set_number_value(&mut self, value: f64) {
-        let mut xml = self.sheet_xml.lock().unwrap();
-        let cell_element = self.get_or_create_cell_element(&mut xml);
+        let mut xml: MutexGuard<Xml> = self.sheet_xml.lock().unwrap();
+        let cell_element: &mut XmlElement = self.get_or_create_cell_element(&mut xml);
         cell_element.attributes.remove("t");
         cell_element.children.retain(|c| c.name != "f");
         if let Some(v) = cell_element.children.iter_mut().find(|c| c.name == "v") {
             v.text = Some(value.to_string());
         } else {
-            let mut v_element = XmlElement::new("v");
+            let mut v_element: XmlElement = XmlElement::new("v");
             v_element.text = Some(value.to_string());
             cell_element.children.push(v_element);
         }
@@ -333,9 +333,9 @@ impl Cell {
 
     /// セルの値の文字列としての設定
     pub fn set_string_value(&mut self, value: &str) {
-        let sst_index = self.get_or_create_shared_string(value);
-        let mut xml = self.sheet_xml.lock().unwrap();
-        let cell_element = self.get_or_create_cell_element(&mut xml);
+        let sst_index: usize = self.get_or_create_shared_string(value);
+        let mut xml: MutexGuard<Xml> = self.sheet_xml.lock().unwrap();
+        let cell_element: &mut XmlElement = self.get_or_create_cell_element(&mut xml);
         cell_element
             .attributes
             .insert("t".to_string(), "s".to_string());
@@ -343,7 +343,7 @@ impl Cell {
         if let Some(v) = cell_element.children.iter_mut().find(|c| c.name == "v") {
             v.text = Some(sst_index.to_string());
         } else {
-            let mut v_element = XmlElement::new("v");
+            let mut v_element: XmlElement = XmlElement::new("v");
             v_element.text = Some(sst_index.to_string());
             cell_element.children.push(v_element);
         }
@@ -353,20 +353,20 @@ impl Cell {
     pub fn set_datetime_value(&mut self, value: NaiveDateTime) {
         // 日時をExcelのシリアル値に変換
         // https://stackoverflow.com/questions/61546133/int-to-datetime-excel に基づく
-        let excel_epoch = chrono::NaiveDate::from_ymd_opt(1899, 12, 30)
-            .unwrap()
+        let excel_epoch: NaiveDateTime = NaiveDate::from_ymd_opt(1899, 12, 30)
+            .expect("Invalid date")
             .and_hms_opt(0, 0, 0)
-            .unwrap();
+            .expect("Invalid time");
         let duration = value.signed_duration_since(excel_epoch);
-        let serial = duration.num_seconds() as f64 / 86400.0;
+        let serial: f64 = duration.num_seconds() as f64 / 86400.0;
         self.set_number_value(serial);
         // TODO: 日付フォーマットのスタイルを設定
     }
 
     /// セルの値のブール値としての設定
     pub fn set_bool_value(&mut self, value: bool) {
-        let mut xml = self.sheet_xml.lock().unwrap();
-        let cell_element = self.get_or_create_cell_element(&mut xml);
+        let mut xml: MutexGuard<Xml> = self.sheet_xml.lock().unwrap();
+        let cell_element: &mut XmlElement = self.get_or_create_cell_element(&mut xml);
         cell_element
             .attributes
             .insert("t".to_string(), "b".to_string());
@@ -374,7 +374,7 @@ impl Cell {
         if let Some(v) = cell_element.children.iter_mut().find(|c| c.name == "v") {
             v.text = Some((if value { "1" } else { "0" }).to_string());
         } else {
-            let mut v_element = XmlElement::new("v");
+            let mut v_element: XmlElement = XmlElement::new("v");
             v_element.text = Some((if value { "1" } else { "0" }).to_string());
             cell_element.children.push(v_element);
         }
@@ -382,14 +382,14 @@ impl Cell {
 
     /// セルの値の数式としての設定
     pub fn set_formula_value(&mut self, formula: &str) {
-        let mut xml = self.sheet_xml.lock().unwrap();
-        let cell_element = self.get_or_create_cell_element(&mut xml);
+        let mut xml: MutexGuard<Xml> = self.sheet_xml.lock().unwrap();
+        let cell_element: &mut XmlElement = self.get_or_create_cell_element(&mut xml);
         cell_element.attributes.remove("t");
         cell_element.children.retain(|c| c.name != "v");
         if let Some(f) = cell_element.children.iter_mut().find(|c| c.name == "f") {
             f.text = Some(formula.to_string());
         } else {
-            let mut f_element = XmlElement::new("f");
+            let mut f_element: XmlElement = XmlElement::new("f");
             f_element.text = Some(formula.to_string());
             cell_element.children.push(f_element);
         }
@@ -397,19 +397,19 @@ impl Cell {
 
     /// ワークシートXML内のセル要素の取得または作成
     fn get_or_create_cell_element<'a>(&self, xml: &'a mut Xml) -> &'a mut XmlElement {
-        let (row_num, _) = self.decode_address();
-        let sheet_data = xml
+        let (row_num, _): (u32, u32) = self.decode_address();
+        let sheet_data: &mut XmlElement = xml
             .elements
             .first_mut()
             .and_then(|ws| ws.children.iter_mut().find(|e| e.name == "sheetData"))
-            .unwrap();
+            .expect("sheetData not found");
 
-        let row_index = sheet_data
+        let row_index: usize = sheet_data
             .children
             .iter()
             .position(|r| r.name == "row" && r.attributes.get("r") == Some(&row_num.to_string()))
             .unwrap_or_else(|| {
-                let mut new_row = XmlElement::new("row");
+                let mut new_row: XmlElement = XmlElement::new("row");
                 new_row
                     .attributes
                     .insert("r".to_string(), row_num.to_string());
@@ -417,12 +417,12 @@ impl Cell {
                 sheet_data.children.len() - 1
             });
 
-        let cell_index = sheet_data.children[row_index]
+        let cell_index: usize = sheet_data.children[row_index]
             .children
             .iter()
             .position(|c| c.name == "c" && c.attributes.get("r") == Some(&self.address))
             .unwrap_or_else(|| {
-                let mut new_cell = XmlElement::new("c");
+                let mut new_cell: XmlElement = XmlElement::new("c");
                 new_cell
                     .attributes
                     .insert("r".to_string(), self.address.clone());
@@ -435,12 +435,12 @@ impl Cell {
 
     /// 共有文字列XML内の共有文字列の取得または作成
     fn get_or_create_shared_string(&mut self, text: &str) -> usize {
-        let mut shared_strings_xml = self.shared_strings.lock().unwrap();
+        let mut shared_strings_xml: MutexGuard<Xml> = self.shared_strings.lock().unwrap();
 
         if shared_strings_xml.elements.is_empty() {
             shared_strings_xml.elements.push(XmlElement::new("sst"));
         }
-        let sst_element = shared_strings_xml.elements.first_mut().unwrap();
+        let sst_element: &mut XmlElement = shared_strings_xml.elements.first_mut().unwrap();
 
         if let Some(index) = sst_element
             .children
@@ -450,9 +450,9 @@ impl Cell {
             return index;
         }
 
-        let mut t_element = XmlElement::new("t");
+        let mut t_element: XmlElement = XmlElement::new("t");
         t_element.text = Some(text.to_string());
-        let mut si_element = XmlElement::new("si");
+        let mut si_element: XmlElement = XmlElement::new("si");
         si_element.children.push(t_element);
         sst_element.children.push(si_element);
         sst_element.children.len() - 1
@@ -460,17 +460,17 @@ impl Cell {
 
     /// セルアドレス (例: "A1") の行と列の番号へのデコード
     fn decode_address(&self) -> (u32, u32) {
-        let mut col_str = String::new();
-        let mut row_str = String::new();
+        let mut col_str: String = String::new();
+        let mut row_str: String = String::new();
         for ch in self.address.chars() {
             if ch.is_alphabetic() {
                 col_str.push(ch);
-            } else {
+            } else if ch.is_ascii_digit() {
                 row_str.push(ch);
             }
         }
-        let row = row_str.parse::<u32>().unwrap();
-        let mut col = 0;
+        let row: u32 = row_str.parse::<u32>().expect("Invalid row number");
+        let mut col: u32 = 0;
         for (i, ch) in col_str.to_uppercase().chars().rev().enumerate() {
             col += (ch as u32 - 'A' as u32 + 1) * 26u32.pow(i as u32);
         }

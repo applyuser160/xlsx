@@ -34,7 +34,7 @@ impl Sheet {
     /// 行と列の番号によるセルの取得
     #[pyo3(signature = (row, column))]
     pub fn cell(&self, row: usize, column: usize) -> Cell {
-        let address = Self::coordinate_to_string(row, column);
+        let address: String = Self::coordinate_to_string(row, column);
         Cell::new(
             self.xml.clone(),
             self.shared_strings.clone(),
@@ -67,10 +67,10 @@ impl Sheet {
 
     /// 行と列の番号のセルアドレス文字列への変換
     fn coordinate_to_string(row: usize, col: usize) -> String {
-        let mut col_str = String::new();
-        let mut col_num = col;
+        let mut col_str: String = String::new();
+        let mut col_num: usize = col;
         while col_num > 0 {
-            let remainder = (col_num - 1) % 26;
+            let remainder: usize = (col_num - 1) % 26;
             col_str.insert(0, (b'A' + remainder as u8) as char);
             col_num = (col_num - 1) / 26;
         }
