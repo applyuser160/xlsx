@@ -12,20 +12,15 @@ use crate::xml::{Xml, XmlElement};
 
 const XML_SUFFIX: &str = ".xml";
 const XML_RELS_SUFFIX: &str = ".xml.rels";
-const VBA_PROJECT_FILENAME: &str = "xl/vbaProject.bin";
 
 const WORKBOOK_FILENAME: &str = "xl/workbook.xml";
 const STYLES_FILENAME: &str = "xl/styles.xml";
 const SHARED_STRINGS_FILENAME: &str = "xl/sharedStrings.xml";
 
 const WORKBOOK_RELS_PREFIX: &str = "xl/_rels/";
-const WORKSHEETS_RELS_PREFIX: &str = "xl/worksheets/_rels/";
 const DRAWINGS_PREFIX: &str = "xl/drawings/";
 const THEME_PREFIX: &str = "xl/theme/";
 const WORKSHEETS_PREFIX: &str = "xl/worksheets/";
-const TABLES_PREFIX: &str = "xl/tables/";
-const PIVOT_TABLES_PREFIX: &str = "xl/pivotTables/";
-const PIVOT_CACHES_PREFIX: &str = "xl/pivotCache/";
 
 const INIT_EXCEL_FILENAME: &str = "/src/xlsx/init.xlsx";
 
@@ -34,29 +29,20 @@ pub struct Book {
     #[pyo3(get, set)]
     pub path: String,
 
+    #[pyo3(get, set)]
+    pub active_sheet_index: usize,
+
     /// `xl/_rels/`以下に存在するファイル
     pub rels: HashMap<String, Xml>,
 
     /// `xl/drawings/`以下に存在するファイル
     pub drawings: HashMap<String, Xml>,
 
-    /// `xl/tables/`以下に存在するファイル
-    pub tables: HashMap<String, Xml>,
-
-    /// `xl/pivotTables/`以下に存在するファイル
-    pub pivot_tables: HashMap<String, Xml>,
-
-    /// `xl/pivotCache/`以下に存在するファイル
-    pub pivot_caches: HashMap<String, Xml>,
-
     /// `xl/theme/`以下に存在するファイル
     pub themes: HashMap<String, Xml>,
 
     /// `xl/worksheets/`以下に存在するファイル
     pub worksheets: HashMap<String, Arc<Mutex<Xml>>>,
-
-    /// `xl/worksheets/_rels/`以下に存在するファイル
-    pub sheet_rels: HashMap<String, Xml>,
 
     /// `xl/sharedStrings.xml`
     pub shared_strings: Arc<Mutex<Xml>>,
@@ -67,8 +53,8 @@ pub struct Book {
     /// `workbook.xml`
     pub workbook: Xml,
 
-    /// `vbaProject.bin`
-    pub vba_project: Option<Vec<u8>>,
+    /// `definedNames`
+    pub defined_names: Vec<XmlElement>,
 }
 
 #[pymethods]
@@ -129,16 +115,11 @@ impl Book {
 
         let mut rels: HashMap<String, Xml> = HashMap::new();
         let mut drawings: HashMap<String, Xml> = HashMap::new();
-        let mut tables: HashMap<String, Xml> = HashMap::new();
-        let mut pivot_tables: HashMap<String, Xml> = HashMap::new();
-        let mut pivot_caches: HashMap<String, Xml> = HashMap::new();
         let mut themes: HashMap<String, Xml> = HashMap::new();
         let mut worksheets: HashMap<String, Arc<Mutex<Xml>>> = HashMap::new();
-        let mut sheet_rels: HashMap<String, Xml> = HashMap::new();
         let mut shared_strings: Arc<Mutex<Xml>> = Arc::new(Mutex::new(Xml::new(&String::new())));
         let mut styles: Arc<Mutex<Xml>> = Arc::new(Mutex::new(Xml::new(&String::new())));
         let mut workbook: Xml = Xml::new(&String::new());
-        let mut vba_project: Option<Vec<u8>> = None;
 
         for i in 0..archive.len() {
             let mut file: zip::read::ZipFile<'_> = archive.by_index(i).unwrap();
@@ -151,12 +132,6 @@ impl Book {
 
                 if name.starts_with(DRAWINGS_PREFIX) {
                     drawings.insert(name, xml);
-                } else if name.starts_with(TABLES_PREFIX) {
-                    tables.insert(name, xml);
-                } else if name.starts_with(PIVOT_TABLES_PREFIX) {
-                    pivot_tables.insert(name, xml);
-                } else if name.starts_with(PIVOT_CACHES_PREFIX) {
-                    pivot_caches.insert(name, xml);
                 } else if name.starts_with(THEME_PREFIX) {
                     themes.insert(name, xml);
                 } else if name.starts_with(WORKSHEETS_PREFIX) {
@@ -168,37 +143,42 @@ impl Book {
                 } else if name == SHARED_STRINGS_FILENAME {
                     shared_strings = Arc::new(Mutex::new(xml));
                 }
-            } else if name.ends_with(XML_RELS_SUFFIX) {
-                if name.starts_with(WORKBOOK_RELS_PREFIX) {
-                    let mut contents: String = String::new();
-                    file.read_to_string(&mut contents).unwrap();
-                    rels.insert(name, Xml::new(&contents));
-                } else if name.starts_with(WORKSHEETS_RELS_PREFIX) {
-                    let mut contents: String = String::new();
-                    file.read_to_string(&mut contents).unwrap();
-                    sheet_rels.insert(name, Xml::new(&contents));
+            } else if name.ends_with(XML_RELS_SUFFIX) && name.starts_with(WORKBOOK_RELS_PREFIX) {
+                let mut contents: String = String::new();
+                file.read_to_string(&mut contents).unwrap();
+                rels.insert(name, Xml::new(&contents));
+            }
+        }
+
+        let mut active_sheet_index = 0;
+        if let Some(workbook_tag) = workbook.elements.first() {
+            if let Some(book_views) = workbook_tag.children.iter().find(|c| c.name == "bookViews") {
+                if let Some(workbook_view) = book_views.children.iter().find(|c| c.name == "workbookView") {
+                    if let Some(active_tab) = workbook_view.attributes.get("activeTab") {
+                        active_sheet_index = active_tab.parse().unwrap_or(0);
+                    }
                 }
-            } else if name == VBA_PROJECT_FILENAME {
-                let mut contents: Vec<u8> = Vec::new();
-                file.read_to_end(&mut contents).unwrap();
-                vba_project = Some(contents);
+            }
+        }
+
+        let mut defined_names = Vec::new();
+        if let Some(workbook_tag) = workbook.elements.first() {
+            if let Some(defined_names_tag) = workbook_tag.children.iter().find(|c| c.name == "definedNames") {
+                defined_names = defined_names_tag.children.clone();
             }
         }
 
         Book {
             path: path.to_string(),
+            active_sheet_index,
             rels,
             drawings,
-            tables,
-            pivot_tables,
-            pivot_caches,
             themes,
             worksheets,
-            sheet_rels,
             shared_strings,
             styles,
             workbook,
-            vba_project,
+            defined_names,
         }
     }
 }
@@ -226,85 +206,70 @@ impl Book {
         panic!("No sheet named '{key}'");
     }
 
-    pub fn add_table(&mut self, sheet_name: String, name: String, table_ref: String) {
-        let table_id = self.tables.len() + 1;
-        let table_filename = format!("xl/tables/table{}.xml", table_id);
-
-        let new_table_xml = Xml::new(&format!(
-            r#"<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
-<table xmlns="http://schemas.openxmlformats.org/spreadsheetml/2006/main" id="{}" name="{}" displayName="{}" ref="{}" totalsRowShown="0">
-    <autoFilter ref="{}"/>
-    <tableColumns count="3">
-        <tableColumn id="1" name="Column1"/>
-        <tableColumn id="2" name="Column2"/>
-        <tableColumn id="3" name="Column3"/>
-    </tableColumns>
-    <tableStyleInfo name="TableStyleMedium2" showFirstColumn="0" showLastColumn="0" showRowStripes="1" showColumnStripes="0"/>
-</table>"#,
-            table_id, name, name, table_ref, table_ref
-        ));
-        self.tables.insert(table_filename.clone(), new_table_xml);
-
-        let sheet_path = self.get_sheet_paths().get(&sheet_name).unwrap().clone();
-        let sheet_xml = self.worksheets.get_mut(&sheet_path).unwrap();
-        let mut sheet_xml_locked = sheet_xml.lock().unwrap();
-        let worksheet = &mut sheet_xml_locked.elements[0];
-        worksheet.children.push(XmlElement {
-            name: "tableParts".to_string(),
-            attributes: {
-                let mut map = HashMap::new();
-                map.insert("count".to_string(), "1".to_string());
-                map
-            },
-            children: vec![
-                XmlElement {
-                    name: "tablePart".to_string(),
-                    attributes: {
-                        let mut map = HashMap::new();
-                        map.insert("r:id".to_string(), format!("rId{}", table_id));
-                        map
-                    },
-                    children: Vec::new(),
-                    text: None,
-                }
-            ],
-            text: None,
-        });
-
-        let rels_filename = format!("xl/worksheets/_rels/{}.rels", sheet_path.split('/').last().unwrap());
-        let rels = self.sheet_rels.entry(rels_filename).or_insert_with(|| Xml::new(&r#"<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
-<Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships">
-</Relationships>"#.to_string()));
-
-        if rels.elements.is_empty() {
-            rels.elements.push(XmlElement {
-                name: "Relationships".to_string(),
-                attributes: HashMap::new(),
-                children: Vec::new(),
-                text: None,
-            });
-        }
-        let relationships = &mut rels.elements[0];
-        relationships.children.push(XmlElement {
-            name: "Relationship".to_string(),
-            attributes: {
-                let mut map = HashMap::new();
-                map.insert("Id".to_string(), format!("rId{}", table_id));
-                map.insert("Type".to_string(), "http://schemas.openxmlformats.org/officeDocument/2006/relationships/table".to_string());
-                map.insert("Target".to_string(), format!("../tables/table{}.xml", table_id));
-                map
-            },
-            children: Vec::new(),
-            text: None,
-        });
-    }
-
     pub fn __delitem__(&mut self, key: String) {
         if let Some(sheet) = self.get_sheet_by_name(key.as_str()) {
             self.remove(&sheet);
             return;
         }
         panic!("No sheet named '{key}'");
+    }
+
+    #[getter]
+    pub fn active(&self) -> PyResult<Sheet> {
+        let sheet_name = self.sheetnames().get(self.active_sheet_index).cloned();
+        match sheet_name {
+            Some(name) => Ok(self.__getitem__(name)),
+            None => Err(pyo3::exceptions::PyValueError::new_err("No active sheet found")),
+        }
+    }
+
+    #[setter(active)]
+    pub fn set_active(&mut self, value: PyObject) -> PyResult<()> {
+        Python::with_gil(|py| {
+            let any = value.bind(py);
+            if let Ok(sheet) = any.extract() {
+                self.active_sheet_index = self.index(&sheet);
+            } else if let Ok(index) = any.extract() {
+                if index >= self.sheetnames().len() {
+                    return Err(pyo3::exceptions::PyValueError::new_err("Sheet index out of range"));
+                }
+                self.active_sheet_index = index;
+            } else {
+                return Err(pyo3::exceptions::PyTypeError::new_err("Invalid type for active sheet"));
+            }
+            self.update_active_tab();
+            Ok(())
+        })
+    }
+
+    #[pyo3(signature = (name, range, local_sheet_id=None))]
+    pub fn create_named_range(&mut self, name: String, range: String, local_sheet_id: Option<usize>) {
+        let mut attributes = HashMap::new();
+        attributes.insert("name".to_string(), name);
+        if let Some(id) = local_sheet_id {
+            attributes.insert("localSheetId".to_string(), id.to_string());
+        }
+        let new_defined_name = XmlElement {
+            name: "definedName".to_string(),
+            attributes,
+            children: Vec::new(),
+            text: Some(range),
+        };
+        self.defined_names.push(new_defined_name);
+        self.update_defined_names();
+    }
+
+    pub fn delete_named_range(&mut self, name: String) {
+        self.defined_names.retain(|dn| dn.attributes.get("name") != Some(&name));
+        self.update_defined_names();
+    }
+
+    #[getter]
+    pub fn defined_names(&self) -> Vec<String> {
+        self.defined_names
+            .iter()
+            .map(|dn| dn.attributes.get("name").unwrap().clone())
+            .collect()
     }
 
     pub fn index(&self, sheet: &Sheet) -> usize {
@@ -488,6 +453,63 @@ impl Book {
 }
 
 impl Book {
+    pub(crate) fn update_active_tab(&mut self) {
+        let workbook_tag = self.workbook.elements.first_mut().unwrap();
+
+        let book_views = match workbook_tag.children.iter_mut().find(|c| c.name == "bookViews") {
+            Some(bv) => bv,
+            None => {
+                let new_book_views = XmlElement {
+                    name: "bookViews".to_string(),
+                    attributes: HashMap::new(),
+                    children: vec![XmlElement {
+                        name: "workbookView".to_string(),
+                        attributes: HashMap::new(),
+                        children: Vec::new(),
+                        text: None,
+                    }],
+                    text: None,
+                };
+                workbook_tag.children.push(new_book_views);
+                workbook_tag.children.iter_mut().find(|c| c.name == "bookViews").unwrap()
+            }
+        };
+
+        let workbook_view = match book_views.children.iter_mut().find(|c| c.name == "workbookView") {
+            Some(wv) => wv,
+            None => {
+                let new_workbook_view = XmlElement {
+                    name: "workbookView".to_string(),
+                    attributes: HashMap::new(),
+                    children: Vec::new(),
+                    text: None,
+                };
+                book_views.children.push(new_workbook_view);
+                book_views.children.iter_mut().find(|c| c.name == "workbookView").unwrap()
+            }
+        };
+
+        workbook_view.attributes.insert("activeTab".to_string(), self.active_sheet_index.to_string());
+    }
+
+    fn update_defined_names(&mut self) {
+        let workbook_tag = self.workbook.elements.first_mut().unwrap();
+        let defined_names_tag = match workbook_tag.children.iter_mut().find(|c| c.name == "definedNames") {
+            Some(dnt) => dnt,
+            None => {
+                let new_defined_names_tag = XmlElement {
+                    name: "definedNames".to_string(),
+                    attributes: HashMap::new(),
+                    children: Vec::new(),
+                    text: None,
+                };
+                workbook_tag.children.push(new_defined_names_tag);
+                workbook_tag.children.iter_mut().find(|c| c.name == "definedNames").unwrap()
+            }
+        };
+        defined_names_tag.children = self.defined_names.clone();
+    }
+
     pub fn save(&self) {
         let file: File = File::open(&self.path).unwrap();
         let mut archive: ZipArchive<File> = ZipArchive::new(file).unwrap();
@@ -500,7 +522,7 @@ impl Book {
         // 構造体内のxmlを集合
         let xmls: HashMap<String, Xml> = self.merge_xmls();
 
-        self.write_file(&mut archive, &xmls, &mut zip_writer, &options);
+        Book::write_file(&mut archive, &xmls, &mut zip_writer, &options);
     }
 
     /// 構造体内のxmlを集合
@@ -516,10 +538,6 @@ impl Book {
             self.shared_strings.lock().unwrap().clone(),
         );
         xmls.extend(self.drawings.clone());
-        xmls.extend(self.tables.clone());
-        xmls.extend(self.pivot_tables.clone());
-        xmls.extend(self.pivot_caches.clone());
-        xmls.extend(self.sheet_rels.clone());
 
         // Arc<Mutex<Xml>>からXmlを取得
         for (key, arc_mutex_xml) in &self.worksheets {
@@ -533,7 +551,6 @@ impl Book {
 
     /// ファイルへの書き込み
     pub fn write_file<W: Write + std::io::Seek>(
-        &self,
         archive: &mut ZipArchive<File>,
         xmls: &HashMap<String, Xml>,
         zip_writer: &mut ZipWriter<W>,
@@ -541,7 +558,7 @@ impl Book {
     ) {
         let file_names: Vec<String> = archive.file_names().map(|s| s.to_string()).collect();
         for filename in file_names {
-            if !xmls.contains_key(&filename) && Some(filename.as_str()) != self.vba_project.as_ref().map(|_| VBA_PROJECT_FILENAME) {
+            if !xmls.contains_key(&filename) {
                 let mut file: zip::read::ZipFile<'_> = archive.by_name(&filename).unwrap();
                 let mut contents: Vec<u8> = Vec::new();
                 file.read_to_end(&mut contents).unwrap();
@@ -553,11 +570,6 @@ impl Book {
         for (file_name, xml) in xmls {
             zip_writer.start_file(file_name, *options).unwrap();
             zip_writer.write_all(&xml.to_buf()).unwrap();
-        }
-
-        if let Some(vba_project) = &self.vba_project {
-            zip_writer.start_file(VBA_PROJECT_FILENAME, *options).unwrap();
-            zip_writer.write_all(vba_project).unwrap();
         }
     }
 
@@ -623,5 +635,62 @@ impl Book {
             }
         }
         None
+    }
+
+    pub fn add_defined_name(&mut self, sheet_name: &str, name: &str, address: &str) {
+        let sheet_index = self.sheetnames().iter().position(|s| s == sheet_name).unwrap();
+        let workbook = &mut self.workbook.elements[0];
+        let defined_names = workbook.children.iter_mut().find(|e| e.name == "definedNames");
+
+        if defined_names.is_none() {
+            let new_defined_names = XmlElement::new("definedNames");
+            workbook.children.push(new_defined_names);
+        }
+
+        let defined_names = workbook.children.iter_mut().find(|e| e.name == "definedNames").unwrap();
+        let mut new_defined_name = XmlElement::new("definedName");
+        new_defined_name.attributes.insert("name".to_string(), name.to_string());
+        new_defined_name.attributes.insert("localSheetId".to_string(), sheet_index.to_string());
+        new_defined_name.text = Some(address.to_string());
+        defined_names.children.push(new_defined_name);
+    }
+
+    pub fn set_print_area(&mut self, sheet_name: &str, range: &str) {
+        let sheet = self.get_sheet_by_name(sheet_name).unwrap();
+        let mut xml = sheet.xml.lock().unwrap();
+        let worksheet = xml.elements.iter_mut().find(|e| e.name == "worksheet").unwrap();
+
+        let print_options = worksheet.children.iter_mut().find(|e| e.name == "printOptions");
+        if print_options.is_none() {
+            let new_print_options = XmlElement::new("printOptions");
+            worksheet.children.push(new_print_options);
+        }
+        let print_options = worksheet.children.iter_mut().find(|e| e.name == "printOptions").unwrap();
+        print_options.attributes.insert("gridLines".to_string(), "1".to_string());
+
+        let full_address = format!("'{}'!{}", sheet_name, range);
+        self.add_defined_name(sheet_name, "_xlnm.Print_Area", &full_address);
+    }
+
+    pub fn set_print_title_rows(&mut self, sheet_name: &str, start_row: usize, end_row: usize) {
+        let address = format!("'{}'!${}:${}$", sheet_name, start_row, end_row);
+        self.add_defined_name(sheet_name, "_xlnm.Print_Titles", &address);
+    }
+
+    pub fn set_print_title_cols(&mut self, sheet_name: &str, start_col: &str, end_col: &str) {
+        let address = format!("'{}'!${}:${}$", sheet_name, start_col, end_col);
+        self.add_defined_name(sheet_name, "_xlnm.Print_Titles", &address);
+    }
+
+    pub fn copy_worksheet(&mut self, from_sheet_name: &str, to_sheet_name: &str) -> Sheet {
+        let from_sheet = self.get_sheet_by_name(from_sheet_name).unwrap();
+        let new_xml = from_sheet.xml.lock().unwrap().clone();
+
+        let new_sheet = self.create_sheet(to_sheet_name.to_string(), self.sheetnames().len());
+        let mut new_sheet_xml = new_sheet.xml.lock().unwrap();
+        *new_sheet_xml = new_xml;
+        drop(new_sheet_xml);
+
+        new_sheet
     }
 }
