@@ -3,7 +3,7 @@ use quick_xml::encoding::EncodingError;
 use quick_xml::events::{BytesDecl, BytesEnd, BytesStart, BytesText, Event};
 use quick_xml::{Reader, Writer};
 use std::collections::HashMap;
-use std::fs::OpenOptions;
+use std::fs::{File, OpenOptions};
 use std::io::{BufRead, BufWriter, Write};
 use thiserror::Error;
 
@@ -33,6 +33,7 @@ pub struct Xml {
     /// XMLファイル内のルート要素のリスト
     pub elements: Vec<XmlElement>,
 }
+
 #[pymethods]
 impl XmlElement {
     /// 与えられたタグ名での新しい `XmlElement` の作成
@@ -50,13 +51,16 @@ impl Xml {
     ///
     /// 子要素が存在しない場合は作成
     pub fn get_mut_or_create_child_by_tag(&mut self, tag_name: &str) -> &mut XmlElement {
-        let style_sheet = self.elements.first_mut().unwrap();
+        let style_sheet: &mut XmlElement = self.elements.first_mut().expect("No elements in XML");
         if let Some(pos) = style_sheet.children.iter().position(|c| c.name == tag_name) {
             &mut style_sheet.children[pos]
         } else {
-            let new_element = XmlElement::new(tag_name);
+            let new_element: XmlElement = XmlElement::new(tag_name);
             style_sheet.children.push(new_element);
-            style_sheet.children.last_mut().unwrap()
+            style_sheet
+                .children
+                .last_mut()
+                .expect("Failed to add new element")
         }
     }
 }
@@ -78,15 +82,15 @@ pub struct XmlElement {
 impl Xml {
     /// 文字列からの新しい `Xml` インスタンスの作成
     pub fn new(contents: &str) -> Result<Self> {
-        let mut reader = Reader::from_str(contents);
-        let mut buf = Vec::new();
-        let mut elements = Vec::new();
-        let mut decl = HashMap::new();
+        let mut reader: Reader<&[u8]> = Reader::from_str(contents);
+        let mut buf: Vec<u8> = Vec::new();
+        let mut elements: Vec<XmlElement> = Vec::new();
+        let mut decl: HashMap<String, String> = HashMap::new();
 
         loop {
             match reader.read_event_into(&mut buf) {
                 Ok(Event::Start(ref e)) => {
-                    let root = Self::parse_element(&mut reader, e)?;
+                    let root: XmlElement = Self::parse_element(&mut reader, e)?;
                     elements.push(root);
                     break;
                 }
@@ -104,13 +108,13 @@ impl Xml {
 
     /// `Xml` 構造体のファイルへの保存
     pub fn save_file(&self, path: &str) -> Result<()> {
-        let file = OpenOptions::new()
+        let file: File = OpenOptions::new()
             .write(true)
             .create(true)
             .truncate(true)
             .open(path)?;
-        let writer = BufWriter::new(file);
-        let mut xml_writer = Writer::new(writer);
+        let writer: BufWriter<File> = BufWriter::new(file);
+        let mut xml_writer: Writer<BufWriter<File>> = Writer::new(writer);
         Self::write_decl(&mut xml_writer, &self.decl)?;
         for element in &self.elements {
             Self::write_element(&mut xml_writer, element)?;
@@ -120,8 +124,8 @@ impl Xml {
 
     /// `Xml` 構造体のバイトベクターへの変換
     pub fn to_buf(&self) -> Result<Vec<u8>> {
-        let mut buffer = Vec::new();
-        let mut xml_writer = Writer::new(&mut buffer);
+        let mut buffer: Vec<u8> = Vec::new();
+        let mut xml_writer: Writer<&mut Vec<u8>> = Writer::new(&mut buffer);
         Self::write_decl(&mut xml_writer, &self.decl)?;
         for element in &self.elements {
             Self::write_element(&mut xml_writer, element)?;
@@ -134,17 +138,17 @@ impl Xml {
         reader: &mut Reader<R>,
         start_tag: &BytesStart,
     ) -> Result<XmlElement> {
-        let name = Self::get_name(start_tag)?;
-        let attributes = Self::get_attributes(start_tag)?;
-        let mut children = Vec::new();
-        let mut text = None;
-        let mut buf = Vec::new();
+        let name: String = Self::get_name(start_tag)?;
+        let attributes: HashMap<String, String> = Self::get_attributes(start_tag)?;
+        let mut children: Vec<XmlElement> = Vec::new();
+        let mut text: Option<String> = None;
+        let mut buf: Vec<u8> = Vec::new();
 
         loop {
             match reader.read_event_into(&mut buf)? {
                 Event::Start(e) => children.push(Self::parse_element(reader, &e)?),
                 Event::Text(e) => {
-                    let content = e.decode()?.to_string();
+                    let content: String = e.decode()?.to_string();
                     if !content.trim().is_empty() {
                         text = Some(content);
                     }
@@ -176,7 +180,7 @@ impl Xml {
 
     /// XML宣言要素の解析
     fn parse_decl_element(decl: &BytesDecl) -> HashMap<String, String> {
-        let mut map = HashMap::new();
+        let mut map: HashMap<String, String> = HashMap::with_capacity(3);
         if let Ok(version) = decl.version() {
             map.insert(
                 "version".to_string(),
@@ -200,7 +204,7 @@ impl Xml {
 
     /// XML要素のライターへの書き込み
     fn write_element<W: Write>(writer: &mut Writer<W>, element: &XmlElement) -> Result<()> {
-        let mut start = BytesStart::new(&element.name);
+        let mut start: BytesStart = BytesStart::new(&element.name);
         for (k, v) in &element.attributes {
             start.push_attribute((k.as_str(), v.as_str()));
         }
@@ -225,10 +229,10 @@ impl Xml {
         writer: &mut Writer<W>,
         decl_hash_map: &HashMap<String, String>,
     ) -> Result<()> {
-        let version = decl_hash_map.get("version").map(|e| e.as_str());
-        let encoding = decl_hash_map.get("encoding").map(|e| e.as_str());
-        let standalone = decl_hash_map.get("standalone").map(|s| s.as_str());
-        let decl = BytesDecl::new(version.unwrap_or("1.0"), encoding, standalone);
+        let version: Option<&str> = decl_hash_map.get("version").map(|e| e.as_str());
+        let encoding: Option<&str> = decl_hash_map.get("encoding").map(|e| e.as_str());
+        let standalone: Option<&str> = decl_hash_map.get("standalone").map(|s| s.as_str());
+        let decl: BytesDecl = BytesDecl::new(version.unwrap_or("1.0"), encoding, standalone);
         writer.write_event(Event::Decl(decl))?;
         Ok(())
     }
@@ -243,9 +247,9 @@ impl Xml {
         start_tag
             .attributes()
             .map(|attr_result| {
-                let attr = attr_result?;
-                let key = String::from_utf8(attr.key.as_ref().to_vec())?;
-                let value = attr.unescape_value()?.to_string();
+                let attr: quick_xml::events::attributes::Attribute<'_> = attr_result?;
+                let key: String = String::from_utf8(attr.key.as_ref().to_vec())?;
+                let value: String = attr.unescape_value()?.to_string();
                 Ok((key, value))
             })
             .collect()
