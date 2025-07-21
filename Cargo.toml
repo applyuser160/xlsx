@@ -16,3 +16,4 @@ quick-xml = "0.38"
 serde = { version = "1.0", features = ["derive"] }
 zip = "0.6"
 chrono = "0.4"
+thiserror = "2.0.12"

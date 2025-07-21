@@ -14,7 +14,7 @@ mod tests {
         let mut file: File = File::open("data/sheet1.xml").unwrap();
         let mut buf = String::new();
         file.read_to_string(&mut buf).unwrap();
-        let xml: Xml = Xml::new(&buf);
+        let xml: Xml = Xml::new(&buf).unwrap();
 
         // Assert
 
@@ -41,8 +41,8 @@ mod tests {
         let mut file: File = File::open("data/sheet1.xml").unwrap();
         let mut buf = String::new();
         file.read_to_string(&mut buf).unwrap();
-        let xml: Xml = Xml::new(&buf);
-        xml.save_file("data/sheet2.xml");
+        let xml: Xml = Xml::new(&buf).unwrap();
+        xml.save_file("data/sheet2.xml").unwrap();
 
         // Assert
 
@@ -58,8 +58,8 @@ mod tests {
         let mut file: File = File::open("data/sheet1.xml").unwrap();
         let mut buf = String::new();
         file.read_to_string(&mut buf).unwrap();
-        let xml: Xml = Xml::new(&buf);
-        let buf = xml.to_buf();
+        let xml: Xml = Xml::new(&buf).unwrap();
+        let buf = xml.to_buf().unwrap();
 
         // Assert
         assert!(!buf.is_empty());
