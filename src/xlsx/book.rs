@@ -575,9 +575,67 @@ impl Book {
                     name.to_string(),
                     xml.clone(),
                     self.shared_strings.clone(),
+                    // self.clone(),
                 ));
             }
         }
         None
+    }
+
+    pub fn add_defined_name(&mut self, sheet_name: &str, name: &str, address: &str) {
+        let sheet_index = self.sheetnames().iter().position(|s| s == sheet_name).unwrap();
+        let workbook = &mut self.workbook.elements[0];
+        let defined_names = workbook.children.iter_mut().find(|e| e.name == "definedNames");
+
+        if defined_names.is_none() {
+            let new_defined_names = XmlElement::new("definedNames");
+            workbook.children.push(new_defined_names);
+        }
+
+        let defined_names = workbook.children.iter_mut().find(|e| e.name == "definedNames").unwrap();
+        let mut new_defined_name = XmlElement::new("definedName");
+        new_defined_name.attributes.insert("name".to_string(), name.to_string());
+        new_defined_name.attributes.insert("localSheetId".to_string(), sheet_index.to_string());
+        new_defined_name.text = Some(address.to_string());
+        defined_names.children.push(new_defined_name);
+    }
+
+    pub fn set_print_area(&mut self, sheet_name: &str, range: &str) {
+        let sheet = self.get_sheet_by_name(sheet_name).unwrap();
+        let mut xml = sheet.xml.lock().unwrap();
+        let worksheet = xml.elements.iter_mut().find(|e| e.name == "worksheet").unwrap();
+
+        let print_options = worksheet.children.iter_mut().find(|e| e.name == "printOptions");
+        if print_options.is_none() {
+            let new_print_options = XmlElement::new("printOptions");
+            worksheet.children.push(new_print_options);
+        }
+        let print_options = worksheet.children.iter_mut().find(|e| e.name == "printOptions").unwrap();
+        print_options.attributes.insert("gridLines".to_string(), "1".to_string());
+
+        let full_address = format!("'{}'!{}", sheet_name, range);
+        self.add_defined_name(sheet_name, "_xlnm.Print_Area", &full_address);
+    }
+
+    pub fn set_print_title_rows(&mut self, sheet_name: &str, start_row: usize, end_row: usize) {
+        let address = format!("'{}'!${}:${}$", sheet_name, start_row, end_row);
+        self.add_defined_name(sheet_name, "_xlnm.Print_Titles", &address);
+    }
+
+    pub fn set_print_title_cols(&mut self, sheet_name: &str, start_col: &str, end_col: &str) {
+        let address = format!("'{}'!${}:${}$", sheet_name, start_col, end_col);
+        self.add_defined_name(sheet_name, "_xlnm.Print_Titles", &address);
+    }
+
+    pub fn copy_worksheet(&mut self, from_sheet_name: &str, to_sheet_name: &str) -> Sheet {
+        let from_sheet = self.get_sheet_by_name(from_sheet_name).unwrap();
+        let new_xml = from_sheet.xml.lock().unwrap().clone();
+
+        let new_sheet = self.create_sheet(to_sheet_name.to_string(), self.sheetnames().len());
+        let mut new_sheet_xml = new_sheet.xml.lock().unwrap();
+        *new_sheet_xml = new_xml;
+        drop(new_sheet_xml);
+
+        new_sheet
     }
 }
