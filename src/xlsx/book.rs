@@ -107,12 +107,17 @@ impl Book {
                 path: "".to_string(),
                 rels,
                 drawings: HashMap::new(),
+                tables: HashMap::new(),
+                pivot_tables: HashMap::new(),
+                pivot_caches: HashMap::new(),
                 themes: HashMap::new(),
                 worksheets: HashMap::new(),
+                sheet_rels: HashMap::new(),
                 shared_strings: Arc::new(Mutex::new(Xml::new(
                     &r#"<?xml version="1.0" encoding="UTF-8" standalone="yes"?><sst xmlns="http://schemas.openxmlformats.org/spreadsheetml/2006/main" count="0" uniqueCount="0"></sst>"#.to_string()))),
                 styles: Arc::new(Mutex::new(Xml::new(&styles_xml.to_string()))),
                 workbook: Xml::new(&workbook_xml.to_string()),
+                vba_project: None,
             }
         } else {
             let file_result: Result<File, std::io::Error> = File::open(path);
@@ -475,7 +480,7 @@ impl Book {
         } else {
             let file = File::open(&self.path).unwrap();
             let mut archive = ZipArchive::new(file).unwrap();
-            Book::write_file(&mut archive, &xmls, &mut zip_writer, &options);
+            self.write_file(&mut archive, &xmls, &mut zip_writer, &options);
         }
 
         zip_writer.finish().unwrap();

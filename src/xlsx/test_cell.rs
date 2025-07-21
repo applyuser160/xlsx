@@ -11,7 +11,7 @@ mod tests {
             let _ = fs::remove_file(&test_path);
         }
         fs::copy(original_path, &test_path).unwrap();
-        Book::new(test_path)
+        Book::new(&test_path)
     }
 
     #[test]
@@ -55,7 +55,7 @@ mod tests {
         book.copy(&copy_path);
 
         // Assert
-        let book_reloaded = Book::new(copy_path.clone());
+        let book_reloaded = Book::new(&copy_path);
         let sheet_reloaded = book_reloaded.__getitem__("シート1".to_string());
         let cell_reloaded = sheet_reloaded.__getitem__("A1");
         assert_eq!(cell_reloaded.value().unwrap(), "999");
@@ -77,7 +77,7 @@ mod tests {
         book.copy(&copy_path);
 
         // Assert
-        let book_reloaded = Book::new(copy_path.clone());
+        let book_reloaded = Book::new(&copy_path);
         let sheet_reloaded = book_reloaded.__getitem__("シート1".to_string());
         let cell_reloaded = sheet_reloaded.__getitem__("B1");
         assert_eq!(cell_reloaded.value().unwrap(), "new_string");
@@ -101,7 +101,7 @@ mod tests {
         book.copy(&copy_path);
 
         // Assert
-        let book_reloaded = Book::new(copy_path.clone());
+        let book_reloaded = Book::new(&copy_path);
         let sheet_reloaded = book_reloaded.__getitem__("シート1".to_string());
         let cell_c1_reloaded = sheet_reloaded.__getitem__("C1");
         let cell_d1_reloaded = sheet_reloaded.__getitem__("D1");
@@ -125,7 +125,7 @@ mod tests {
         book.copy(&copy_path);
 
         // Assert
-        let book_reloaded = Book::new(copy_path.clone());
+        let book_reloaded = Book::new(&copy_path);
         let sheet_reloaded = book_reloaded.__getitem__("シート1".to_string());
         let cell_reloaded = sheet_reloaded.__getitem__("E1");
         // Excel's serial value for 2024-01-01 12:30:00 is 45292.520833333336
@@ -153,7 +153,7 @@ mod tests {
         book.copy(&copy_path);
 
         // Assert
-        let book_reloaded = Book::new(copy_path.clone());
+        let book_reloaded = Book::new(&copy_path);
         let sheet_reloaded = book_reloaded.__getitem__("シート1".to_string());
         let cell_f1_reloaded = sheet_reloaded.__getitem__("F1");
         let cell_g1_reloaded = sheet_reloaded.__getitem__("G1");
@@ -177,7 +177,7 @@ mod tests {
         book.copy(&copy_path);
 
         // Assert
-        let book_reloaded = Book::new(copy_path.clone());
+        let book_reloaded = Book::new(&copy_path);
         let sheet_reloaded = book_reloaded.__getitem__("シート1".to_string());
         let cell_reloaded = sheet_reloaded.__getitem__("H1");
         // TODO: 実際に計算された値を取得する方法は未実装
