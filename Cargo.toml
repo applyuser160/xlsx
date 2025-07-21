@@ -10,7 +10,7 @@ crate-type = ["cdylib"]
 
 [dependencies]
 cargo-llvm-cov = "0.6.14"
-pyo3 = { version = "0.25.0", features = ["extension-module", "abi3-py39"] }
+pyo3 = { version = "0.24.0", features = ["extension-module", "abi3-py39"] }
 umya-spreadsheet = "2.3.0"
 quick-xml = "0.38"
 serde = { version = "1.0", features = ["derive"] }
