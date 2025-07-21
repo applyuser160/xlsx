@@ -1,31 +1,29 @@
 use pyo3::prelude::*;
 
-/// Excelセルのフォントプロパティ表現
-///
-/// 名前、サイズ、太字、イタリック、色など、詳細なフォントカスタマイズの提供
+/// Represents the font properties for a cell.
 #[pyclass]
 #[derive(Clone, Debug, PartialEq, Default)]
 pub struct Font {
-    /// フォント名（例：「Calibri」）
+    /// The name of the font.
     #[pyo3(get, set)]
     pub name: Option<String>,
-    /// フォントサイズ
+    /// The size of the font.
     #[pyo3(get, set)]
     pub size: Option<f64>,
-    /// フォントが太字かどうかのブール値
+    /// Whether the font is bold.
     #[pyo3(get, set)]
     pub bold: Option<bool>,
-    /// フォントがイタリックかどうかのブール値
+    /// Whether the font is italic.
     #[pyo3(get, set)]
     pub italic: Option<bool>,
-    /// ARGB形式のフォント色（例：「FF000000」）
+    /// The color of the font in ARGB format (e.g., "FF000000").
     #[pyo3(get, set)]
     pub color: Option<String>,
 }
 
 #[pymethods]
 impl Font {
-    /// オプションのプロパティを持つ新しい`Font`インスタンスの作成
+    /// Creates a new `Font` instance.
     #[new]
     #[pyo3(signature = (name=None, size=None, bold=None, italic=None, color=None))]
     fn new(
@@ -35,7 +33,7 @@ impl Font {
         italic: Option<bool>,
         color: Option<String>,
     ) -> Self {
-        Self {
+        Font {
             name,
             size,
             bold,
@@ -45,29 +43,27 @@ impl Font {
     }
 }
 
-/// セルの罫線プロパティ表現
-///
-/// セル罫線の四方のスタイルと色の定義
+/// Represents the border properties for a cell.
 #[pyclass]
 #[derive(Clone, Debug, PartialEq, Default)]
 pub struct Border {
-    /// 左罫線のスタイル
+    /// The left border.
     #[pyo3(get, set)]
     pub left: Option<Side>,
-    /// 右罫線のスタイル
+    /// The right border.
     #[pyo3(get, set)]
     pub right: Option<Side>,
-    /// 上罫線のスタイル
+    /// The top border.
     #[pyo3(get, set)]
     pub top: Option<Side>,
-    /// 下罫線のスタイル
+    /// The bottom border.
     #[pyo3(get, set)]
     pub bottom: Option<Side>,
 }
 
 #[pymethods]
 impl Border {
-    /// オプションの辺スタイルを持つ新しい`Border`インスタンスの作成
+    /// Creates a new `Border` instance.
     #[new]
     #[pyo3(signature = (left=None, right=None, top=None, bottom=None))]
     fn new(
@@ -76,7 +72,7 @@ impl Border {
         top: Option<Side>,
         bottom: Option<Side>,
     ) -> Self {
-        Self {
+        Border {
             left,
             right,
             top,
@@ -85,48 +81,46 @@ impl Border {
     }
 }
 
-/// 罫線の片側のスタイル表現
+/// Represents the properties of a single border side.
 #[pyclass]
 #[derive(Clone, Debug, PartialEq, Default)]
 pub struct Side {
-    /// 罫線のスタイル（例：「thin」、「medium」、「thick」）
+    /// The style of the border (e.g., "thin", "medium", "thick").
     #[pyo3(get, set)]
     pub style: Option<String>,
-    /// ARGB形式の罫線色
+    /// The color of the border in ARGB format.
     #[pyo3(get, set)]
     pub color: Option<String>,
 }
 
 #[pymethods]
 impl Side {
-    /// オプションのスタイルと色を持つ新しい`Side`インスタンスの作成
+    /// Creates a new `Side` instance.
     #[new]
     #[pyo3(signature = (style=None, color=None))]
     fn new(style: Option<String>, color: Option<String>) -> Self {
-        Self { style, color }
+        Side { style, color }
     }
 }
 
-/// セルのパターン塗り表現
-///
-/// セルの塗りつぶしパターン、前景色、背景色の定義
+/// Represents the pattern fill properties for a cell.
 #[pyclass]
 #[derive(Clone, Debug, PartialEq, Default)]
 pub struct PatternFill {
-    /// パターンの種類（例：「solid」、「gray125」）
+    /// The type of the pattern (e.g., "solid", "gray125").
     #[pyo3(get, set)]
     pub pattern_type: Option<String>,
-    /// ARGB形式の塗りつぶし前景色
+    /// The foreground color in ARGB format.
     #[pyo3(get, set)]
     pub fg_color: Option<String>,
-    /// ARGB形式の塗りつぶし背景色
+    /// The background color in ARGB format.
     #[pyo3(get, set)]
     pub bg_color: Option<String>,
 }
 
 #[pymethods]
 impl PatternFill {
-    /// オプションのプロパティを持つ新しい`PatternFill`インスタンスの作成
+    /// Creates a new `PatternFill` instance.
     #[new]
     #[pyo3(signature = (pattern_type=None, fg_color=None, bg_color=None))]
     fn new(
@@ -134,7 +128,7 @@ impl PatternFill {
         fg_color: Option<String>,
         bg_color: Option<String>,
     ) -> Self {
-        Self {
+        PatternFill {
             pattern_type,
             fg_color,
             bg_color,
