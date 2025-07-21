@@ -1,6 +1,6 @@
 use crate::xlsx::style::{Font, PatternFill};
 use crate::xlsx::xml::{Xml, XmlElement};
-use chrono::{Datelike, NaiveDateTime};
+use chrono::{NaiveDateTime};
 use pyo3::prelude::*;
 use std::sync::{Arc, Mutex};
 
