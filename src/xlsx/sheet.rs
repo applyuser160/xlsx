@@ -67,13 +67,26 @@ impl Sheet {
 
     /// 行と列の番号のセルアドレス文字列への変換
     fn coordinate_to_string(row: usize, col: usize) -> String {
-        let mut col_str: String = String::new();
-        let mut col_num: usize = col;
-        while col_num > 0 {
-            let remainder: usize = (col_num - 1) % 26;
-            col_str.insert(0, (b'A' + remainder as u8) as char);
-            col_num = (col_num - 1) / 26;
-        }
+        // 列番号をアルファベットに変換
+        let col_str: String =
+            std::iter::successors(
+                Some(col),
+                |&c| {
+                    if c > 0 {
+                        Some((c - 1) / 26)
+                    } else {
+                        None
+                    }
+                },
+            )
+            .take_while(|&c| c > 0)
+            .map(|c| ((c - 1) % 26) as u8 + b'A')
+            .map(|c| c as char)
+            .collect::<String>()
+            .chars()
+            .rev()
+            .collect();
+        // A1形式で返却
         format!("{col_str}{row}")
     }
 }

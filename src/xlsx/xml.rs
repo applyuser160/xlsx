@@ -51,16 +51,21 @@ impl Xml {
     ///
     /// 子要素が存在しない場合は作成
     pub fn get_mut_or_create_child_by_tag(&mut self, tag_name: &str) -> &mut XmlElement {
-        let style_sheet: &mut XmlElement = self.elements.first_mut().expect("No elements in XML");
+        let style_sheet: &mut XmlElement = match self.elements.first_mut() {
+            Some(element) => element,
+            None => panic!("No elements in XML"),
+        };
+        // 子要素の検索
         if let Some(pos) = style_sheet.children.iter().position(|c| c.name == tag_name) {
             &mut style_sheet.children[pos]
         } else {
+            // 新規作成して返却
             let new_element: XmlElement = XmlElement::new(tag_name);
             style_sheet.children.push(new_element);
-            style_sheet
-                .children
-                .last_mut()
-                .expect("Failed to add new element")
+            match style_sheet.children.last_mut() {
+                Some(element) => element,
+                None => panic!("Failed to add new element"),
+            }
         }
     }
 }
