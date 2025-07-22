@@ -46,6 +46,61 @@ impl XmlElement {
     }
 }
 
+impl XmlElement {
+    pub fn get_element(&self, path: &str) -> &XmlElement {
+        let mut current_element = self;
+        for tag in path.split('>') {
+            current_element = current_element
+                .children
+                .iter()
+                .find(|c| c.name == tag)
+                .unwrap();
+        }
+        current_element
+    }
+
+    pub fn get_elements(&self, path: &str) -> Vec<&XmlElement> {
+        let mut current_elements = vec![self];
+        for tag in path.split('>') {
+            current_elements = current_elements
+                .iter()
+                .flat_map(|e| e.children.iter().filter(|c| c.name == tag))
+                .collect();
+        }
+        current_elements
+    }
+
+    pub fn get_element_mut(&mut self, path: &str) -> &mut XmlElement {
+        let mut current_element = self;
+        for tag in path.split('>') {
+            current_element = current_element
+                .children
+                .iter_mut()
+                .find(|c| c.name == tag)
+                .unwrap();
+        }
+        current_element
+    }
+
+    pub fn get_attribute(&self, key: &str) -> Option<&String> {
+        self.attributes.get(key)
+    }
+
+    pub fn get_text(&self) -> &str {
+        self.text.as_deref().unwrap_or_default()
+    }
+
+    pub fn push_str(&mut self, content: &str) {
+        // This is a bit of a hack to append raw XML content.
+        // It assumes the content is well-formed.
+        // A proper implementation would parse the string into XmlElement objects.
+        if self.text.is_none() {
+            self.text = Some(String::new());
+        }
+        self.text.as_mut().unwrap().push_str(content);
+    }
+}
+
 impl Xml {
     /// タグ名による子要素への可変参照の取得
     ///
