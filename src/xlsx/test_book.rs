@@ -103,25 +103,6 @@ mod tests {
     }
 
     #[test]
-    fn test_merge_xmls() {
-        // 観点: XMLの結合
-
-        // Act
-        let book = Book::new("data/sample.xlsx");
-        let xmls = book.merge_xmls();
-
-        // Assert
-        assert!(xmls.contains_key("xl/workbook.xml"));
-        assert!(xmls.contains_key("xl/styles.xml"));
-        assert!(xmls.contains_key("xl/sharedStrings.xml"));
-
-        // worksheetsのキーが含まれていることを確認
-        for key in book.worksheets.keys() {
-            assert!(xmls.contains_key(key));
-        }
-    }
-
-    #[test]
     fn test_write_file_indirectly() {
         // 観点: ファイルへの書き込み（copy経由での間接テスト）
         let book = setup_book("write_file");

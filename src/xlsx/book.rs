@@ -437,10 +437,7 @@ impl Book {
 
         xmls_with_paths.push((&workbook_filename_str, Box::new(&self.workbook)));
         xmls_with_paths.push((&styles_filename_str, Box::new(&self.styles)));
-        xmls_with_paths.push((
-            &shared_strings_filename_str,
-            Box::new(&self.shared_strings),
-        ));
+        xmls_with_paths.push((&shared_strings_filename_str, Box::new(&self.shared_strings)));
 
         self.rels
             .iter()
@@ -480,14 +477,17 @@ impl Book {
                         panic!("Failed to get file by name {} from zip", &filename)
                     });
                     let mut contents: Vec<u8> = Vec::new();
-                    file.read_to_end(&mut contents)
-                        .unwrap_or_else(|_| panic!("Failed to read file content from {}", &filename));
+                    file.read_to_end(&mut contents).unwrap_or_else(|_| {
+                        panic!("Failed to read file content from {}", &filename)
+                    });
                     zip_writer
                         .start_file(filename.clone(), *options)
-                        .unwrap_or_else(|_| panic!("Failed to start file {} in new zip", &filename));
-                    zip_writer
-                        .write_all(&contents)
-                        .unwrap_or_else(|_| panic!("Failed to write file content to {}", &filename));
+                        .unwrap_or_else(|_| {
+                            panic!("Failed to start file {} in new zip", &filename)
+                        });
+                    zip_writer.write_all(&contents).unwrap_or_else(|_| {
+                        panic!("Failed to write file content to {}", &filename)
+                    });
                 }
             }
         }
