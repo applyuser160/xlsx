@@ -63,9 +63,8 @@ def measure_manage_xlsx():
 
     # 2. Write data to the sheet
     start_time_write = time.time()
-    for i, row_data in enumerate(DATA):
-        for j, cell_data in enumerate(row_data):
-            sheet.cell(i, j).value = cell_data
+    for row_data in DATA:
+        sheet.append(row_data)
     end_time_write = time.time()
 
     # 3. Save the workbook
@@ -83,13 +82,8 @@ def measure_manage_xlsx():
     # 5. Read data from the sheet
     start_time_read = time.time()
     rows = []
-    num_rows = len(DATA)
-    num_cols = len(DATA[0])
-    for r in range(num_rows):
-        row = []
-        for c in range(num_cols):
-            row.append(sheet.cell(r, c).value)
-        rows.append(tuple(row))
+    for row in sheet.iter_rows(values_only=True):
+        rows.append(row)
     end_time_read = time.time()
 
     return {
@@ -115,6 +109,4 @@ if __name__ == "__main__":
     print("\n| Operation | openpyxl (seconds) | manage-xlsx (seconds) |")
     print("|---|---|---|")
     for op in results_openpyxl:
-        print(
-            f"| {op} | {results_openpyxl[op]:.6f} | {results_manage_xlsx[op]:.6f} |"
-        )
+        print(f"| {op} | {results_openpyxl[op]:.6f} | {results_manage_xlsx[op]:.6f} |")

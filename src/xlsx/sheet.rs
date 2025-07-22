@@ -42,6 +42,76 @@ impl Sheet {
             address,
         )
     }
+
+    /// シートへの行の追加
+    pub fn append(&self, row_data: Vec<String>) {
+        use crate::xml::XmlElement;
+        let mut xml = self.xml.lock().unwrap();
+        let worksheet = &mut xml.elements[0];
+        let sheet_data = worksheet.get_element_mut("sheetData");
+        let new_row_num = if let Some(last_row) = sheet_data.get_elements("row").last() {
+            last_row
+                .get_attribute("r")
+                .unwrap()
+                .parse::<usize>()
+                .unwrap()
+                + 1
+        } else {
+            1
+        };
+
+        let mut row_element = XmlElement::new("row");
+        row_element
+            .attributes
+            .insert("r".to_string(), new_row_num.to_string());
+
+        for (i, cell_data) in row_data.iter().enumerate() {
+            let col_str = Self::col_to_string(i + 1);
+            let mut cell_element = XmlElement::new("c");
+            cell_element
+                .attributes
+                .insert("r".to_string(), format!("{col_str}{new_row_num}"));
+            cell_element
+                .attributes
+                .insert("t".to_string(), "inlineStr".to_string());
+
+            let mut is_element = XmlElement::new("is");
+            let mut t_element = XmlElement::new("t");
+            t_element.text = Some(cell_data.clone());
+            is_element.children.push(t_element);
+            cell_element.children.push(is_element);
+            row_element.children.push(cell_element);
+        }
+        sheet_data.children.push(row_element);
+    }
+
+    /// シート内の行のイテレータの取得
+    #[pyo3(signature = (values_only = false))]
+    pub fn iter_rows(&self, values_only: bool) -> PyResult<Vec<Vec<String>>> {
+        let xml = self.xml.lock().unwrap();
+        let worksheet = &xml.elements[0];
+        let sheet_data = worksheet.get_element("sheetData");
+        let rows = sheet_data.get_elements("row");
+        let mut result = Vec::new();
+
+        for row in rows {
+            let mut row_data = Vec::new();
+            let cells = row.get_elements("c");
+            for cell in cells {
+                let value = if values_only {
+                    let val = cell.get_element("is>t").get_text();
+                    val.to_string().to_owned()
+                } else {
+                    // NOTE:現時点ではCellオブジェクトは返さず、値のみを返す
+                    let val = cell.get_element("is>t").get_text();
+                    val.to_string().to_owned()
+                };
+                row_data.push(value);
+            }
+            result.push(row_data);
+        }
+        Ok(result)
+    }
 }
 
 impl Sheet {
@@ -67,26 +137,19 @@ impl Sheet {
 
     /// 行と列の番号のセルアドレス文字列への変換
     fn coordinate_to_string(row: usize, col: usize) -> String {
-        // 列番号をアルファベットに変換
-        let col_str: String =
-            std::iter::successors(
-                Some(col),
-                |&c| {
-                    if c > 0 {
-                        Some((c - 1) / 26)
-                    } else {
-                        None
-                    }
-                },
-            )
-            .take_while(|&c| c > 0)
-            .map(|c| ((c - 1) % 26) as u8 + b'A')
-            .map(|c| c as char)
-            .collect::<String>()
-            .chars()
-            .rev()
-            .collect();
         // A1形式で返却
-        format!("{col_str}{row}")
+        format!("{}{}", Self::col_to_string(col), row)
+    }
+
+    /// 列番号のアルファベットへの変換
+    fn col_to_string(col: usize) -> String {
+        let mut result = String::new();
+        let mut n = col;
+        while n > 0 {
+            let rem = (n - 1) % 26;
+            result.insert(0, (b'A' + rem as u8) as char);
+            n = (n - 1) / 26;
+        }
+        result
     }
 }
