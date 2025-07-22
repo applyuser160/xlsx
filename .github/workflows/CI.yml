@@ -27,9 +27,13 @@ jobs:
       - uses: actions/checkout@v4
         with:
           lfs: true
+      - name: Install Python development headers
+        run: sudo apt-get update && sudo apt-get install -y python3-dev
       - uses: ./.github/actions/cache_cargo
       - name: test
         run: cargo test
+        env:
+          PYTHON_SYS_EXECUTABLE: python3
 
   linux:
     runs-on: ${{ matrix.platform.runner }}
