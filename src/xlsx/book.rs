@@ -134,11 +134,11 @@ impl Book {
         // テーブルXMLの作成
         self.create_table_xml(&name, &table_ref, table_id, &table_filename);
 
-        // ワークシートへのテーブルパーツの追加
-        self.add_table_parts_to_worksheet(&sheet_name, table_id);
-
         // ワークシートのリレーションシップへのリレーションシップの追加
-        self.add_table_relationship(&sheet_name, table_id);
+        let rid = self.add_table_relationship(&sheet_name, table_id);
+
+        // ワークシートへのテーブルパーツの追加
+        self.add_table_parts_to_worksheet(&sheet_name, &rid);
     }
 
     /// 名前によるシートの削除
@@ -558,7 +558,7 @@ impl Book {
     }
 
     /// ワークシートへのテーブルパーツの追加
-    fn add_table_parts_to_worksheet(&mut self, sheet_name: &str, table_id: usize) {
+    fn add_table_parts_to_worksheet(&mut self, sheet_name: &str, r_id: &str) {
         let sheet_path: String = self
             .get_sheet_paths()
             .get(sheet_name)
@@ -573,7 +573,7 @@ impl Book {
                 attributes.insert("count".to_string(), "1".to_string());
 
                 let mut table_part_attributes: HashMap<String, String> = HashMap::with_capacity(1);
-                table_part_attributes.insert("r:id".to_string(), format!("rId{table_id}"));
+                table_part_attributes.insert("r:id".to_string(), r_id.to_string());
 
                 let table_part: XmlElement = XmlElement {
                     name: "tablePart".to_string(),
@@ -592,7 +592,7 @@ impl Book {
     }
 
     /// ワークシートのリレーションシップへのテーブルリレーションシップの追加
-    fn add_table_relationship(&mut self, sheet_name: &str, table_id: usize) {
+    fn add_table_relationship(&mut self, sheet_name: &str, table_id: usize) -> String {
         let sheet_paths: HashMap<String, String> = self.get_sheet_paths();
         let sheet_path: &String = sheet_paths
             .get(sheet_name)
@@ -619,9 +619,11 @@ impl Book {
                 ..Default::default()
             });
         }
+
+        let r_id = format!("rId{}", rels.elements[0].children.len() + 1);
         if let Some(relationships) = rels.elements.get_mut(0) {
             let mut attributes: HashMap<String, String> = HashMap::with_capacity(3);
-            attributes.insert("Id".to_string(), format!("rId{table_id}"));
+            attributes.insert("Id".to_string(), r_id.clone());
             attributes.insert(
                 "Type".to_string(),
                 "http://schemas.openxmlformats.org/officeDocument/2006/relationships/table"
@@ -638,6 +640,7 @@ impl Book {
                 ..Default::default()
             });
         }
+        r_id
     }
 
     /// workbook.xml へのシートの追加

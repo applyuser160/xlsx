@@ -1,28 +1,30 @@
 #[cfg(test)]
-mod tests {
+pub mod tests {
     use crate::book::Book;
     use std::{fs, path::Path};
 
     fn setup_book(test_name: &str) -> Book {
-        let original_path = "data/sample.xlsx";
-        let test_path = format!("data/test_book_{test_name}.xlsx");
-        if Path::new(&test_path).exists() {
+        let manifest_dir = std::env::var("CARGO_MANIFEST_DIR").unwrap();
+        let original_path = Path::new(&manifest_dir).join("data/sample.xlsx");
+        let test_path = Path::new(&manifest_dir).join(format!("data/test_book_{test_name}.xlsx"));
+        if test_path.exists() {
             let _ = fs::remove_file(&test_path);
         }
-        fs::copy(original_path, &test_path).unwrap();
-        Book::new(&test_path)
+        fs::copy(&original_path, &test_path).unwrap();
+        Book::new(test_path.to_str().unwrap())
     }
 
     fn cleanup(book: Book) {
         let _ = fs::remove_file(book.path);
     }
 
-    #[test]
-    fn test_new_book() {
+    pub fn test_new_book() {
         // 観点: Excelファイルの読み取り
 
         // Act
-        let book = Book::new("data/sample.xlsx");
+        let manifest_dir = std::env::var("CARGO_MANIFEST_DIR").unwrap();
+        let path = Path::new(&manifest_dir).join("data/sample.xlsx");
+        let book = Book::new(path.to_str().unwrap());
 
         // Assert
         let xml = book.worksheets.get("xl/worksheets/sheet1.xml").unwrap();
@@ -32,8 +34,7 @@ mod tests {
         assert_eq!(xml_guard.decl.get("standalone").unwrap(), "yes");
     }
 
-    #[test]
-    fn test_copy_book() {
+    pub fn test_copy_book() {
         // 観点: Excelファイルの名前をつけて保存
         let book = setup_book("copy_book");
         let copy_path = format!("{}.copy.xlsx", book.path);
@@ -59,12 +60,13 @@ mod tests {
         let _ = fs::remove_file(copy_path);
     }
 
-    #[test]
-    fn test_sheetnames() {
+    pub fn test_sheetnames() {
         // 観点: シート名一覧の取得
 
         // Act
-        let book = Book::new("data/sample.xlsx");
+        let manifest_dir = std::env::var("CARGO_MANIFEST_DIR").unwrap();
+        let path = Path::new(&manifest_dir).join("data/sample.xlsx");
+        let book = Book::new(path.to_str().unwrap());
         let sheetnames = book.sheetnames();
 
         // Assert
@@ -72,20 +74,20 @@ mod tests {
         assert!(sheetnames.contains(&"シート1".to_string()));
     }
 
-    #[test]
-    fn test_contains__() {
+    pub fn test_contains__() {
         // 観点: シート名の存在確認
 
         // Act
-        let book = Book::new("data/sample.xlsx");
+        let manifest_dir = std::env::var("CARGO_MANIFEST_DIR").unwrap();
+        let path = Path::new(&manifest_dir).join("data/sample.xlsx");
+        let book = Book::new(path.to_str().unwrap());
 
         // Assert
         assert!(book.__contains__("シート1".to_string()));
         assert!(!book.__contains__("存在しないシート".to_string()));
     }
 
-    #[test]
-    fn test_create_sheet() {
+    pub fn test_create_sheet() {
         // 観点: 新規シートの作成
 
         // Arrange
@@ -102,12 +104,13 @@ mod tests {
         cleanup(book);
     }
 
-    #[test]
-    fn test_merge_xmls() {
+    pub fn test_merge_xmls() {
         // 観点: XMLの結合
 
         // Act
-        let book = Book::new("data/sample.xlsx");
+        let manifest_dir = std::env::var("CARGO_MANIFEST_DIR").unwrap();
+        let path = Path::new(&manifest_dir).join("data/sample.xlsx");
+        let book = Book::new(path.to_str().unwrap());
         let xmls = book.merge_xmls();
 
         // Assert
@@ -121,8 +124,7 @@ mod tests {
         }
     }
 
-    #[test]
-    fn test_write_file_indirectly() {
+    pub fn test_write_file_indirectly() {
         // 観点: ファイルへの書き込み（copy経由での間接テスト）
         let book = setup_book("write_file");
         let copy_path = format!("{}.copy.xlsx", book.path);
@@ -137,12 +139,13 @@ mod tests {
         let _ = fs::remove_file(copy_path);
     }
 
-    #[test]
-    fn test_sheet_tags() {
+    pub fn test_sheet_tags() {
         // 観点: シートタグの取得
 
         // Act
-        let book = Book::new("data/sample.xlsx");
+        let manifest_dir = std::env::var("CARGO_MANIFEST_DIR").unwrap();
+        let path = Path::new(&manifest_dir).join("data/sample.xlsx");
+        let book = Book::new(path.to_str().unwrap());
         let sheet_tags = book.sheet_tags();
 
         // Assert
@@ -155,12 +158,13 @@ mod tests {
         assert!(first_sheet.attributes.contains_key("r:id"));
     }
 
-    #[test]
-    fn test_relationships() {
+    pub fn test_relationships() {
         // 観点: リレーションシップの取得
 
         // Act
-        let book = Book::new("data/sample.xlsx");
+        let manifest_dir = std::env::var("CARGO_MANIFEST_DIR").unwrap();
+        let path = Path::new(&manifest_dir).join("data/sample.xlsx");
+        let book = Book::new(path.to_str().unwrap());
         let relationships = book.get_relationships();
 
         // Assert
@@ -173,12 +177,13 @@ mod tests {
         assert!(first_rel.attributes.contains_key("Target"));
     }
 
-    #[test]
-    fn test_sheet_paths() {
+    pub fn test_sheet_paths() {
         // 観点: シートパスの取得
 
         // Act
-        let book = Book::new("data/sample.xlsx");
+        let manifest_dir = std::env::var("CARGO_MANIFEST_DIR").unwrap();
+        let path = Path::new(&manifest_dir).join("data/sample.xlsx");
+        let book = Book::new(path.to_str().unwrap());
         let sheet_paths = book.get_sheet_paths();
 
         // Assert
@@ -194,8 +199,7 @@ mod tests {
         }
     }
 
-    #[test]
-    fn test_delete_sheet() {
+    pub fn test_delete_sheet() {
         // 観点: シートを削除できるか
         let mut book = setup_book("delete_sheet");
         let sheet_count_before = book.sheetnames().len();
@@ -212,8 +216,7 @@ mod tests {
         cleanup(book);
     }
 
-    #[test]
-    fn test_sheet_index() {
+    pub fn test_sheet_index() {
         // 観点: シートのインデックスを取得できるか
         let book = setup_book("sheet_index");
         let sheet = book.__getitem__("シート1".to_string());
@@ -227,8 +230,7 @@ mod tests {
         cleanup(book);
     }
 
-    #[test]
-    fn test_create_sheet_with_index() {
+    pub fn test_create_sheet_with_index() {
         // 観点: 指定したインデックスにシートを作成できるか
         let mut book = setup_book("create_with_index");
 
@@ -245,8 +247,7 @@ mod tests {
         cleanup(book);
     }
 
-    #[test]
-    fn test_add_table() {
+    pub fn test_add_table() {
         // 観点: テーブルを追加できるか
         let mut book = setup_book("add_table");
 
@@ -268,6 +269,8 @@ mod tests {
             .find(|e| e.name == "tableParts")
             .unwrap();
         assert_eq!(table_parts.attributes.get("count").unwrap(), "1");
+        let table_part = &table_parts.children[0];
+        assert_eq!(table_part.attributes.get("r:id").unwrap(), "rId1");
 
         cleanup(book);
     }

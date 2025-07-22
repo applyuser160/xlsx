@@ -48,9 +48,10 @@ impl Sheet {
         let mut xml_guard = self.xml.lock().unwrap();
         let worksheet = &mut xml_guard.elements[0];
         let sheet_data = worksheet.get_element_mut("sheetData");
-        let new_row_num = if let Some(last_row) = sheet_data.get_elements("row").last() {
+        let new_row_num = if let Some(last_row) = sheet_data.children.iter().last() {
             last_row
-                .get_attribute("r")
+                .attributes
+                .get("r")
                 .unwrap()
                 .parse::<usize>()
                 .unwrap()
@@ -59,21 +60,26 @@ impl Sheet {
             1
         };
 
-        let mut row_string = format!(r#"<row r="{new_row_num}">"#);
+        let mut new_row = crate::xml::XmlElement::new("row");
+        new_row
+            .attributes
+            .insert("r".to_string(), new_row_num.to_string());
+
         for (i, cell_data) in row_data.iter().enumerate() {
             let col_str = Self::col_to_string(i + 1);
-            row_string.push_str(&format!(
-                r#"<c r="{col_str}{new_row_num}" t="inlineStr"><is><t>{cell_data}</t></is></c>"#
-            ));
+            let mut cell = crate::xml::XmlElement::new("c");
+            cell.attributes
+                .insert("r".to_string(), format!("{col_str}{new_row_num}"));
+            cell.attributes
+                .insert("t".to_string(), "inlineStr".to_string());
+            let mut is = crate::xml::XmlElement::new("is");
+            let mut t = crate::xml::XmlElement::new("t");
+            t.text = Some(cell_data.clone());
+            is.children.push(t);
+            cell.children.push(is);
+            new_row.children.push(cell);
         }
-        row_string.push_str("</row>");
-
-        // This is a hack to append raw XML. A proper implementation would parse this string.
-        if let Some(text) = &mut sheet_data.text {
-            text.push_str(&row_string);
-        } else {
-            sheet_data.text = Some(row_string);
-        }
+        sheet_data.children.push(new_row);
     }
 
     /// シート内の行のイテレータの取得
@@ -82,13 +88,11 @@ impl Sheet {
         let xml = self.xml.lock().unwrap();
         let worksheet = &xml.elements[0];
         let sheet_data = worksheet.get_element("sheetData");
-        let rows = sheet_data.get_elements("row");
         let mut result = Vec::new();
 
-        for row in rows {
+        for row in &sheet_data.children {
             let mut row_data = Vec::new();
-            let cells = row.get_elements("c");
-            for cell in cells {
+            for cell in &row.children {
                 let value = if values_only {
                     let val = cell.get_element("is>t").get_text();
                     val.to_string().to_owned()

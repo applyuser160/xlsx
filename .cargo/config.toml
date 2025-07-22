@@ -1,0 +1,2 @@
+[build]
+rustflags = ["-L", "/home/jules/.pyenv/versions/3.12.11/lib", "-lpython3.12", "-Wl,-rpath,/home/jules/.pyenv/versions/3.12.11/lib"]
