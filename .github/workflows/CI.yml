@@ -30,8 +30,12 @@ jobs:
       - name: Install Python development headers
         run: sudo apt-get update && sudo apt-get install -y python3-dev
       - uses: ./.github/actions/cache_cargo
+      - name: Check Python version
+        run: python3 --version
       - name: test
-        run: cargo test
+        run: |
+          cargo clean
+          cargo test
         env:
           PYTHON_SYS_EXECUTABLE: python3
 
