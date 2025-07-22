@@ -79,9 +79,7 @@ impl Sheet {
             // 共有文字列テーブルへの追加
             let shared_string_id = self.add_shared_string(cell_data);
 
-            cell_element
-                .attributes
-                .insert("t".to_string(), "s".to_string());
+            cell_element.attributes.insert("t".to_string(), "s".to_string());
             let mut v_element = XmlElement::new("v");
             v_element.text = Some(shared_string_id.to_string());
             cell_element.children.push(v_element);

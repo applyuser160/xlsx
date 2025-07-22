@@ -384,9 +384,11 @@ impl Book {
                                 STYLES_FILENAME => book.styles = Arc::new(Mutex::new(xml)),
                                 SHARED_STRINGS_FILENAME => {
                                     let mut map = HashMap::new();
-                                    for (i, si) in xml.elements[0].children.iter().enumerate() {
-                                        let s = si.get_element("t").get_text().to_string();
-                                        map.insert(s, i);
+                                    if !xml.elements.is_empty() {
+                                        for (i, si) in xml.elements[0].children.iter().enumerate() {
+                                            let s = si.get_element("t").get_text().to_string();
+                                            map.insert(s, i);
+                                        }
                                     }
                                     book.shared_strings = Arc::new(Mutex::new(xml));
                                     book.shared_strings_map = Arc::new(Mutex::new(map));
@@ -437,7 +439,10 @@ impl Book {
 
         xmls_with_paths.push((&workbook_filename_str, Box::new(&self.workbook)));
         xmls_with_paths.push((&styles_filename_str, Box::new(&self.styles)));
-        xmls_with_paths.push((&shared_strings_filename_str, Box::new(&self.shared_strings)));
+        xmls_with_paths.push((
+            &shared_strings_filename_str,
+            Box::new(&self.shared_strings),
+        ));
 
         self.rels
             .iter()
@@ -477,17 +482,14 @@ impl Book {
                         panic!("Failed to get file by name {} from zip", &filename)
                     });
                     let mut contents: Vec<u8> = Vec::new();
-                    file.read_to_end(&mut contents).unwrap_or_else(|_| {
-                        panic!("Failed to read file content from {}", &filename)
-                    });
+                    file.read_to_end(&mut contents)
+                        .unwrap_or_else(|_| panic!("Failed to read file content from {}", &filename));
                     zip_writer
                         .start_file(filename.clone(), *options)
-                        .unwrap_or_else(|_| {
-                            panic!("Failed to start file {} in new zip", &filename)
-                        });
-                    zip_writer.write_all(&contents).unwrap_or_else(|_| {
-                        panic!("Failed to write file content to {}", &filename)
-                    });
+                        .unwrap_or_else(|_| panic!("Failed to start file {} in new zip", &filename));
+                    zip_writer
+                        .write_all(&contents)
+                        .unwrap_or_else(|_| panic!("Failed to write file content to {}", &filename));
                 }
             }
         }
