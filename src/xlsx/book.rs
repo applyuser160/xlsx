@@ -1,6 +1,6 @@
 use std::collections::HashMap;
 use std::fs::{File, OpenOptions};
-use std::io::{Cursor, Read, Write};
+use std::io::{BufReader, BufWriter, Cursor, Read, Write};
 use std::sync::{Arc, Mutex, MutexGuard};
 use zip::write::FileOptions;
 use zip::{ZipArchive, ZipWriter};
@@ -74,6 +74,7 @@ pub struct Book {
 
     /// `xl/sharedStrings.xml` ファイル
     pub shared_strings: Arc<Mutex<Xml>>,
+    pub shared_strings_map: Arc<Mutex<HashMap<String, usize>>>,
 
     /// `xl/styles.xml` ファイル
     pub styles: Arc<Mutex<Xml>>,
@@ -226,6 +227,7 @@ impl Book {
             title,
             arc_mutex_xml,
             self.shared_strings.clone(),
+            self.shared_strings_map.clone(),
             self.styles.clone(),
         )
     }
@@ -238,28 +240,52 @@ impl Book {
             .truncate(true)
             .open(path)
             .expect("Failed to create new file");
-        let mut zip_writer: ZipWriter<File> = ZipWriter::new(new_file);
+        let writer: BufWriter<File> = BufWriter::new(new_file);
+        let mut zip_writer: ZipWriter<BufWriter<File>> = ZipWriter::new(writer);
         let options: FileOptions =
             FileOptions::default().compression_method(zip::CompressionMethod::Stored);
-        let xmls: HashMap<String, Xml> = self.merge_xmls();
 
         if self.path.is_empty() {
-            for (file_name, xml) in &xmls {
-                zip_writer
-                    .start_file(file_name, options)
-                    .expect("Failed to start file in zip");
-                zip_writer
-                    .write_all(&xml.to_buf().expect("Failed to convert XML to buffer"))
-                    .expect("Failed to write to zip");
-            }
+            self.write_to_archive::<_, std::io::Cursor<Vec<u8>>>(None, &mut zip_writer, &options);
         } else {
             let file: File = File::open(&self.path).expect("Failed to open original file");
-            let mut archive: ZipArchive<File> =
-                ZipArchive::new(file).expect("Failed to open zip archive");
-            self.write_to_archive(&mut archive, &xmls, &mut zip_writer, &options);
+            let reader: BufReader<File> = BufReader::new(file);
+            let mut archive: ZipArchive<BufReader<File>> =
+                ZipArchive::new(reader).expect("Failed to open zip archive");
+            self.write_to_archive(Some(&mut archive), &mut zip_writer, &options);
         }
 
         zip_writer.finish().expect("Failed to finish zip writing");
+    }
+}
+
+use crate::xml::XmlError;
+
+trait ToXml {
+    fn to_buf(&self) -> Result<Vec<u8>, XmlError>;
+}
+
+impl ToXml for Xml {
+    fn to_buf(&self) -> Result<Vec<u8>, XmlError> {
+        self.to_buf()
+    }
+}
+
+impl ToXml for &Xml {
+    fn to_buf(&self) -> Result<Vec<u8>, XmlError> {
+        (*self).to_buf()
+    }
+}
+
+impl ToXml for Arc<Mutex<Xml>> {
+    fn to_buf(&self) -> Result<Vec<u8>, XmlError> {
+        self.lock().unwrap().to_buf()
+    }
+}
+
+impl ToXml for &Arc<Mutex<Xml>> {
+    fn to_buf(&self) -> Result<Vec<u8>, XmlError> {
+        self.lock().unwrap().to_buf()
     }
 }
 
@@ -304,6 +330,7 @@ impl Book {
             shared_strings: Arc::new(Mutex::new(Xml::new(
                 r#"<?xml version="1.0" encoding="UTF-8" standalone="yes"?><sst xmlns="http://schemas.openxmlformats.org/spreadsheetml/2006/main" count="0" uniqueCount="0"></sst>"#,
             ).expect("Failed to create shared strings"))),
+            shared_strings_map: Arc::new(Mutex::new(HashMap::new())),
             styles: Arc::new(Mutex::new(Xml::new(styles_xml).expect("Failed to create styles"))),
             workbook: Xml::new(workbook_xml).expect("Failed to create workbook"),
             vba_project: None,
@@ -313,8 +340,9 @@ impl Book {
     /// ファイルからのワークブックの読み込み
     fn from_file(path: &str) -> Self {
         let file: File = File::open(path).unwrap_or_else(|_| panic!("File not found: {path}"));
-        let mut archive: ZipArchive<File> =
-            ZipArchive::new(file).expect("Failed to open zip archive");
+        let reader: BufReader<File> = BufReader::new(file);
+        let mut archive: ZipArchive<BufReader<File>> =
+            ZipArchive::new(reader).expect("Failed to open zip archive");
 
         let mut book: Book = Self::new_empty_workbook();
         book.path = path.to_string();
@@ -324,7 +352,7 @@ impl Book {
                 let name: String = file.name().to_string();
 
                 if name.ends_with(XML_SUFFIX) || name.ends_with(XML_RELS_SUFFIX) {
-                    let mut contents: String = String::new();
+                    let mut contents: String = String::with_capacity(file.size() as usize);
                     if file.read_to_string(&mut contents).is_ok() {
                         if let Ok(xml) = Xml::new(&contents) {
                             match name.as_str() {
@@ -355,7 +383,15 @@ impl Book {
                                 WORKBOOK_FILENAME => book.workbook = xml,
                                 STYLES_FILENAME => book.styles = Arc::new(Mutex::new(xml)),
                                 SHARED_STRINGS_FILENAME => {
-                                    book.shared_strings = Arc::new(Mutex::new(xml))
+                                    let mut map = HashMap::new();
+                                    if !xml.elements.is_empty() {
+                                        for (i, si) in xml.elements[0].children.iter().enumerate() {
+                                            let s = si.get_element("t").get_text().to_string();
+                                            map.insert(s, i);
+                                        }
+                                    }
+                                    book.shared_strings = Arc::new(Mutex::new(xml));
+                                    book.shared_strings_map = Arc::new(Mutex::new(map));
                                 }
                                 _ => {}
                             }
@@ -376,84 +412,89 @@ impl Book {
     pub fn save(&self) {
         let file: File = File::open(&self.path)
             .unwrap_or_else(|_| panic!("Failed to open file for saving: {}", &self.path));
-        let mut archive: ZipArchive<File> =
-            ZipArchive::new(file).expect("Failed to open zip archive for saving");
+        let reader: BufReader<File> = BufReader::new(file);
+        let mut archive: ZipArchive<BufReader<File>> =
+            ZipArchive::new(reader).expect("Failed to open zip archive for saving");
 
         let buffer: Cursor<Vec<u8>> = Cursor::new(Vec::new());
         let mut zip_writer: ZipWriter<Cursor<Vec<u8>>> = ZipWriter::new(buffer);
         let options: FileOptions =
             FileOptions::default().compression_method(zip::CompressionMethod::Stored);
 
-        let xmls: HashMap<String, Xml> = self.merge_xmls();
-        self.write_to_archive(&mut archive, &xmls, &mut zip_writer, &options);
-    }
-
-    /// 構造体からの全XMLファイルのマージ
-    pub fn merge_xmls(&self) -> HashMap<String, Xml> {
-        let mut xmls: HashMap<String, Xml> = self.rels.clone();
-        xmls.insert(WORKBOOK_FILENAME.to_string(), self.workbook.clone());
-        xmls.insert(
-            STYLES_FILENAME.to_string(),
-            self.styles
-                .lock()
-                .expect("Failed to lock styles for merging")
-                .clone(),
-        );
-        xmls.insert(
-            SHARED_STRINGS_FILENAME.to_string(),
-            self.shared_strings
-                .lock()
-                .expect("Failed to lock shared strings for merging")
-                .clone(),
-        );
-        xmls.extend(self.drawings.clone());
-        xmls.extend(self.tables.clone());
-        xmls.extend(self.pivot_tables.clone());
-        xmls.extend(self.pivot_caches.clone());
-        xmls.extend(self.sheet_rels.clone());
-
-        for (key, arc_mutex_xml) in &self.worksheets {
-            let xml: Xml = arc_mutex_xml
-                .lock()
-                .unwrap_or_else(|_| panic!("Failed to lock worksheet {key} for merging"))
-                .clone();
-            xmls.insert(key.clone(), xml);
-        }
-
-        xmls.extend(self.themes.clone());
-        xmls
+        self.write_to_archive(Some(&mut archive), &mut zip_writer, &options);
     }
 
     /// ワークブックのzipアーカイブへの書き込み
-    fn write_to_archive<W: Write + std::io::Seek>(
+    fn write_to_archive<W: Write + std::io::Seek, R: Read + std::io::Seek>(
         &self,
-        archive: &mut ZipArchive<File>,
-        xmls: &HashMap<String, Xml>,
+        archive: Option<&mut ZipArchive<R>>,
         zip_writer: &mut ZipWriter<W>,
         options: &FileOptions,
     ) {
-        let file_names: Vec<String> = archive.file_names().map(|s| s.to_string()).collect();
-        for filename in file_names {
-            if !xmls.contains_key(&filename)
-                && Some(filename.as_str())
-                    != self.vba_project.as_ref().map(|_| VBA_PROJECT_FILENAME)
-            {
-                let mut file = archive.by_name(&filename).unwrap_or_else(|_| {
-                    panic!("Failed to get file by name {} from zip", &filename)
-                });
-                let mut contents: Vec<u8> = Vec::new();
-                file.read_to_end(&mut contents)
-                    .unwrap_or_else(|_| panic!("Failed to read file content from {}", &filename));
-                zip_writer
-                    .start_file(filename.clone(), *options)
-                    .unwrap_or_else(|_| panic!("Failed to start file {} in new zip", &filename));
-                zip_writer
-                    .write_all(&contents)
-                    .unwrap_or_else(|_| panic!("Failed to write file content to {}", &filename));
+        // 全XMLファイルへの参照を一つのVecにまとめる
+        let mut xmls_with_paths: Vec<(&String, Box<dyn ToXml>)> = Vec::new();
+        let workbook_filename_str: String = WORKBOOK_FILENAME.to_string();
+        let styles_filename_str: String = STYLES_FILENAME.to_string();
+        let shared_strings_filename_str: String = SHARED_STRINGS_FILENAME.to_string();
+
+        xmls_with_paths.push((&workbook_filename_str, Box::new(&self.workbook)));
+        xmls_with_paths.push((&styles_filename_str, Box::new(&self.styles)));
+        xmls_with_paths.push((&shared_strings_filename_str, Box::new(&self.shared_strings)));
+
+        self.rels
+            .iter()
+            .for_each(|(k, v)| xmls_with_paths.push((k, Box::new(v))));
+        self.drawings
+            .iter()
+            .for_each(|(k, v)| xmls_with_paths.push((k, Box::new(v))));
+        self.tables
+            .iter()
+            .for_each(|(k, v)| xmls_with_paths.push((k, Box::new(v))));
+        self.pivot_tables
+            .iter()
+            .for_each(|(k, v)| xmls_with_paths.push((k, Box::new(v))));
+        self.pivot_caches
+            .iter()
+            .for_each(|(k, v)| xmls_with_paths.push((k, Box::new(v))));
+        self.sheet_rels
+            .iter()
+            .for_each(|(k, v)| xmls_with_paths.push((k, Box::new(v))));
+        self.worksheets
+            .iter()
+            .for_each(|(k, v)| xmls_with_paths.push((k, Box::new(v))));
+        self.themes
+            .iter()
+            .for_each(|(k, v)| xmls_with_paths.push((k, Box::new(v))));
+
+        if let Some(archive) = archive {
+            let file_names: Vec<String> = archive.file_names().map(|s| s.to_string()).collect();
+            for filename in file_names {
+                if !xmls_with_paths
+                    .iter()
+                    .any(|(path, _)| path.as_str() == filename)
+                    && Some(filename.as_str())
+                        != self.vba_project.as_ref().map(|_| VBA_PROJECT_FILENAME)
+                {
+                    let mut file = archive.by_name(&filename).unwrap_or_else(|_| {
+                        panic!("Failed to get file by name {} from zip", &filename)
+                    });
+                    let mut contents: Vec<u8> = Vec::new();
+                    file.read_to_end(&mut contents).unwrap_or_else(|_| {
+                        panic!("Failed to read file content from {}", &filename)
+                    });
+                    zip_writer
+                        .start_file(filename.clone(), *options)
+                        .unwrap_or_else(|_| {
+                            panic!("Failed to start file {} in new zip", &filename)
+                        });
+                    zip_writer.write_all(&contents).unwrap_or_else(|_| {
+                        panic!("Failed to write file content to {}", &filename)
+                    });
+                }
             }
         }
 
-        for (file_name, xml) in xmls {
+        for (file_name, xml) in xmls_with_paths {
             zip_writer
                 .start_file(file_name, *options)
                 .unwrap_or_else(|_| panic!("Failed to start file {file_name} in new zip"));
@@ -525,6 +566,7 @@ impl Book {
                     name.to_string(),
                     xml.clone(),
                     self.shared_strings.clone(),
+                    self.shared_strings_map.clone(),
                     self.styles.clone(),
                 )
             })

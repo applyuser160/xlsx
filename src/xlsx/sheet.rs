@@ -5,6 +5,8 @@ use pyo3::prelude::*;
 use crate::cell::Cell;
 use crate::xml::Xml;
 
+use std::collections::HashMap;
+
 /// Excelワークブック内のワークシート
 #[pyclass]
 pub struct Sheet {
@@ -15,6 +17,8 @@ pub struct Sheet {
     xml: Arc<Mutex<Xml>>,
     /// 共有文字列のXML
     shared_strings: Arc<Mutex<Xml>>,
+    /// 共有文字列のマップ
+    shared_strings_map: Arc<Mutex<HashMap<String, usize>>>,
     /// スタイルのXML
     styles: Arc<Mutex<Xml>>,
 }
@@ -71,15 +75,16 @@ impl Sheet {
             cell_element
                 .attributes
                 .insert("r".to_string(), format!("{col_str}{new_row_num}"));
+
+            // 共有文字列テーブルへの追加
+            let shared_string_id = self.add_shared_string(cell_data);
+
             cell_element
                 .attributes
-                .insert("t".to_string(), "inlineStr".to_string());
-
-            let mut is_element = XmlElement::new("is");
-            let mut t_element = XmlElement::new("t");
-            t_element.text = Some(cell_data.clone());
-            is_element.children.push(t_element);
-            cell_element.children.push(is_element);
+                .insert("t".to_string(), "s".to_string());
+            let mut v_element = XmlElement::new("v");
+            v_element.text = Some(shared_string_id.to_string());
+            cell_element.children.push(v_element);
             row_element.children.push(cell_element);
         }
         sheet_data.children.push(row_element);
@@ -89,6 +94,8 @@ impl Sheet {
     #[pyo3(signature = (values_only = false))]
     pub fn iter_rows(&self, values_only: bool) -> PyResult<Vec<Vec<String>>> {
         let xml = self.xml.lock().unwrap();
+        let shared_strings_xml = self.shared_strings.lock().unwrap();
+        let sst = &shared_strings_xml.elements[0];
         let worksheet = &xml.elements[0];
         let sheet_data = worksheet.get_element("sheetData");
         let rows = sheet_data.get_elements("row");
@@ -99,12 +106,32 @@ impl Sheet {
             let cells = row.get_elements("c");
             for cell in cells {
                 let value = if values_only {
-                    let val = cell.get_element("is>t").get_text();
-                    val.to_string().to_owned()
+                    if let Some(t) = cell.attributes.get("t") {
+                        if t == "s" {
+                            let v = cell.get_element("v").get_text();
+                            let id = v.parse::<usize>().unwrap();
+                            sst.children[id].get_element("t").get_text().to_string()
+                        } else {
+                            cell.get_element("is>t").get_text().to_string()
+                        }
+                    } else {
+                        // Not a string, so just get the value
+                        cell.get_element("v").get_text().to_string()
+                    }
                 } else {
                     // NOTE:現時点ではCellオブジェクトは返さず、値のみを返す
-                    let val = cell.get_element("is>t").get_text();
-                    val.to_string().to_owned()
+                    if let Some(t) = cell.attributes.get("t") {
+                        if t == "s" {
+                            let v = cell.get_element("v").get_text();
+                            let id = v.parse::<usize>().unwrap();
+                            sst.children[id].get_element("t").get_text().to_string()
+                        } else {
+                            cell.get_element("is>t").get_text().to_string()
+                        }
+                    } else {
+                        // Not a string, so just get the value
+                        cell.get_element("v").get_text().to_string()
+                    }
                 };
                 row_data.push(value);
             }
@@ -120,14 +147,45 @@ impl Sheet {
         name: String,
         xml: Arc<Mutex<Xml>>,
         shared_strings: Arc<Mutex<Xml>>,
+        shared_strings_map: Arc<Mutex<HashMap<String, usize>>>,
         styles: Arc<Mutex<Xml>>,
     ) -> Self {
         Sheet {
             name,
             xml,
             shared_strings,
+            shared_strings_map,
             styles,
         }
+    }
+
+    /// 共有文字列テーブルへの文字列の追加
+    fn add_shared_string(&self, s: &str) -> usize {
+        let mut shared_strings_map = self.shared_strings_map.lock().unwrap();
+        if let Some(&id) = shared_strings_map.get(s) {
+            return id;
+        }
+
+        let mut shared_strings = self.shared_strings.lock().unwrap();
+        let sst = &mut shared_strings.elements[0];
+
+        // 新しい文字列の追加
+        use crate::xml::XmlElement;
+        let mut si = XmlElement::new("si");
+        let mut t = XmlElement::new("t");
+        t.text = Some(s.to_string());
+        si.children.push(t);
+        sst.children.push(si);
+
+        let count = sst.children.len();
+        sst.attributes
+            .insert("count".to_string(), count.to_string());
+        sst.attributes
+            .insert("uniqueCount".to_string(), count.to_string());
+
+        let new_id = count - 1;
+        shared_strings_map.insert(s.to_string(), new_id);
+        new_id
     }
 
     #[cfg(test)]
