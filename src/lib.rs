@@ -10,6 +10,9 @@ pub mod style;
 pub mod xml;
 
 #[cfg(test)]
+#[path = "xlsx/test_book.rs"]
+mod test_book;
+#[cfg(test)]
 #[path = "xlsx/test_cell.rs"]
 mod test_cell;
 #[cfg(test)]
