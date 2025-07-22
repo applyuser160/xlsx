@@ -30,6 +30,15 @@ jobs:
       - name: Install Python development headers
         run: sudo apt-get update && sudo apt-get install -y python3-dev
       - uses: ./.github/actions/cache_cargo
+      - name: Install system dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y \
+            pkg-config \
+            libbz2-dev \
+            libzstd-dev \
+            python3-dev \
+            cmake
       - name: test
         run: cargo test
         env:
