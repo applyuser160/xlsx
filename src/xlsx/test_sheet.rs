@@ -27,4 +27,34 @@ mod tests {
         // Assert
         assert_eq!(cell.value().unwrap(), "1.0");
     }
+
+    #[test]
+    fn test_append() {
+        // 観点: 行を追加できるか
+        let book = Book::new("data/sample.xlsx");
+        let sheet = book.__getitem__("シート1".to_string());
+        let new_row = vec!["foo".to_string(), "bar".to_string()];
+
+        // Act
+        sheet.append(&new_row);
+
+        // Assert
+        let appended_row = sheet.iter_rows().last().unwrap();
+        assert_eq!(appended_row[0].value(), Some("foo".to_string()));
+        assert_eq!(appended_row[1].value(), Some("bar".to_string()));
+    }
+
+    #[test]
+    fn test_iter_rows() {
+        // 観点: 行をイテレートできるか
+        let book = Book::new("data/sample.xlsx");
+        let sheet = book.__getitem__("シート1".to_string());
+        let mut rows = sheet.iter_rows();
+        let first_row = rows.next().unwrap();
+        assert_eq!(first_row[0].value(), Some("1.0".to_string()));
+        assert_eq!(first_row[1].value(), Some("3.0".to_string()));
+        let second_row = rows.next().unwrap();
+        assert_eq!(second_row[0].value(), Some("2.0".to_string()));
+        assert_eq!(second_row[1].value(), Some("4.0".to_string()));
+    }
 }
