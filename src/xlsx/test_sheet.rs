@@ -36,7 +36,7 @@ mod tests {
         let new_row = vec!["foo".to_string(), "bar".to_string()];
 
         // Act
-        sheet.append(&new_row);
+        sheet.append(new_row);
 
         // Assert
         let appended_row = sheet.iter_rows().last().unwrap();

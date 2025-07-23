@@ -46,11 +46,9 @@ impl Sheet {
             address,
         )
     }
-}
 
-impl Sheet {
     /// シートへの行の追加
-    pub fn append<T: ToString>(&self, row_data: &[T]) {
+    pub fn append(&self, row_data: Vec<String>) {
         use crate::xml::XmlElement;
         let mut xml: std::sync::MutexGuard<Xml> = self.xml.lock().unwrap();
         let worksheet: &mut crate::xml::XmlElement = &mut xml.elements[0];
@@ -112,6 +110,7 @@ impl Sheet {
     }
 }
 /// 行のイテレータ
+#[pyclass]
 pub struct IterRows {
     rows: Vec<crate::xml::XmlElement>,
     current_row: usize,
