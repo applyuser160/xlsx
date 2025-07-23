@@ -152,7 +152,6 @@ impl Xml {
                 Ok(Event::Start(ref e)) => {
                     let root: XmlElement = Self::parse_element(&mut reader, e)?;
                     elements.push(root);
-                    break;
                 }
                 Ok(Event::Decl(ref e)) => {
                     decl = Self::parse_decl_element(e);
