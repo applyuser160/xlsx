@@ -91,7 +91,8 @@ impl Sheet {
     }
 
     /// シート内の行のイテレータの取得
-    pub fn iter_rows(&self) -> IterRows {
+    #[pyo3(signature = (values_only = false))]
+    pub fn iter_rows(&self, values_only: bool) -> IterRows {
         let xml: std::sync::MutexGuard<Xml> = self.xml.lock().unwrap();
         let worksheet: &crate::xml::XmlElement = &xml.elements[0];
         let sheet_data: &crate::xml::XmlElement = worksheet.get_element("sheetData");
@@ -101,6 +102,7 @@ impl Sheet {
             .map(|&x| x.clone())
             .collect();
         IterRows {
+            values_only,
             rows,
             current_row: 0,
             xml: self.xml.clone(),
@@ -112,6 +114,7 @@ impl Sheet {
 /// 行のイテレータ
 #[pyclass]
 pub struct IterRows {
+    values_only: bool,
     rows: Vec<crate::xml::XmlElement>,
     current_row: usize,
     xml: Arc<Mutex<Xml>>,
@@ -145,6 +148,14 @@ impl Iterator for IterRows {
             })
             .collect();
         self.current_row += 1;
+
+        // if self.values_only {
+        //     let values: Vec<String> = row
+        //         .iter()
+        //         .map(|cell| cell.value().unwrap().to_string())
+        //         .collect();
+        //     return Some(values);
+        // }
         Some(row)
     }
 }
