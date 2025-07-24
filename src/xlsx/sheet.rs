@@ -91,31 +91,27 @@ impl Sheet {
     }
 
     /// シート内の行のイテレータの取得
-    pub fn iter_rows(&self) -> Vec<Vec<Cell>> {
-        let xml: std::sync::MutexGuard<Xml> = self.xml.lock().unwrap();
-        let worksheet: &crate::xml::XmlElement = &xml.elements[0];
-        let sheet_data: &crate::xml::XmlElement = worksheet.get_element("sheetData");
-        let rows: Vec<crate::xml::XmlElement> = sheet_data
-            .get_elements("row")
-            .iter()
-            .map(|&x| x.clone())
-            .collect();
-        rows.iter()
-            .map(|row| {
-                row.get_elements("c")
-                    .iter()
-                    .map(|cell| {
-                        let address: String = cell.get_attribute("r").unwrap().to_string();
-                        Cell::new(
-                            self.xml.clone(),
-                            self.shared_strings.clone(),
-                            self.styles.clone(),
-                            address,
-                        )
-                    })
-                    .collect()
-            })
-            .collect()
+    pub fn iter_rows(&self) -> Vec<Vec<String>> {
+        let xml = self.xml.lock().unwrap();
+        let worksheet = &xml.elements[0];
+        let sheet_data = worksheet.get_element("sheetData");
+        let rows = sheet_data.get_elements("row");
+
+        let mut result = Vec::new();
+
+        for row in rows {
+            let mut row_data = Vec::new();
+            let cells = row.get_elements("c");
+
+            for cell in cells {
+                let cell_value = self.get_cell_value(cell);
+                row_data.push(cell_value);
+            }
+
+            result.push(row_data);
+        }
+
+        result
     }
 }
 
@@ -196,5 +192,45 @@ impl Sheet {
             n = (n - 1) / 26;
         }
         result
+    }
+
+    /// セルの値を取得
+    fn get_cell_value(&self, cell: &crate::xml::XmlElement) -> String {
+        if let Some(v_element) = cell.get_elements("v").first() {
+            if let Some(value) = &v_element.text {
+                // セルのタイプを確認
+                if let Some(cell_type) = cell.get_attribute("t") {
+                    match cell_type.as_str() {
+                        "s" => {
+                            // 共有文字列の場合
+                            if let Ok(index) = value.parse::<usize>() {
+                                return self.get_shared_string_by_index(index);
+                            }
+                        }
+                        _ => {
+                            // その他のタイプはそのまま返す
+                            return value.clone();
+                        }
+                    }
+                }
+                return value.clone();
+            }
+        }
+        String::new()
+    }
+
+    /// インデックスによる共有文字列の取得
+    fn get_shared_string_by_index(&self, index: usize) -> String {
+        let shared_strings = self.shared_strings.lock().unwrap();
+        if let Some(sst) = shared_strings.elements.first() {
+            if let Some(si) = sst.children.get(index) {
+                if let Some(t) = si.get_elements("t").first() {
+                    if let Some(text) = &t.text {
+                        return text.clone();
+                    }
+                }
+            }
+        }
+        String::new()
     }
 }

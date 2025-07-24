@@ -42,8 +42,8 @@ mod tests {
         let sheet_row_len = sheet.iter_rows().len();
         let binding = sheet.iter_rows();
         let appended_row = binding.get(sheet_row_len - 1).unwrap();
-        assert_eq!(appended_row[0].value(), Some("foo".to_string()));
-        assert_eq!(appended_row[1].value(), Some("bar".to_string()));
+        assert_eq!(appended_row[0], "foo".to_string());
+        assert_eq!(appended_row[1], "bar".to_string());
     }
 
     #[test]
@@ -53,10 +53,10 @@ mod tests {
         let sheet = book.__getitem__("シート1".to_string());
         let rows = sheet.iter_rows();
         let first_row = rows.first().unwrap();
-        assert_eq!(first_row[0].value(), Some("1.0".to_string()));
-        assert_eq!(first_row[1].value(), Some("3.0".to_string()));
-        let second_row = rows.first().unwrap();
-        assert_eq!(second_row[0].value(), Some("2.0".to_string()));
-        assert_eq!(second_row[1].value(), Some("4.0".to_string()));
+        assert_eq!(first_row[0], "1.0".to_string());
+        assert_eq!(first_row[1], "3.0".to_string());
+        let second_row = rows.get(1).unwrap();
+        assert_eq!(second_row[0], "2.0".to_string());
+        assert_eq!(second_row[1], "4.0".to_string());
     }
 }
