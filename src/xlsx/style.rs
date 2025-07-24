@@ -43,6 +43,23 @@ impl Font {
     }
 }
 
+impl Font {
+    pub(crate) fn from_xml_element(element: &crate::xml::XmlElement) -> Self {
+        let mut font = Font::default();
+        for child in &element.children {
+            match child.name.as_str() {
+                "name" => font.name = child.attributes.get("val").cloned(),
+                "sz" => font.size = child.attributes.get("val").and_then(|s| s.parse().ok()),
+                "b" => font.bold = Some(true),
+                "i" => font.italic = Some(true),
+                "color" => font.color = child.attributes.get("rgb").cloned(),
+                _ => {}
+            }
+        }
+        font
+    }
+}
+
 /// セルの罫線プロパティ
 #[pyclass]
 #[derive(Clone, Debug, PartialEq, Default)]
