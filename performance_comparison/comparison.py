@@ -82,7 +82,7 @@ def measure_manage_xlsx():
     # 5. Read data from the sheet
     start_time_read = time.time()
     rows = []
-    for row in sheet.iter_rows(values_only=True):
+    for row in sheet.iter_rows():
         rows.append(row)
     end_time_read = time.time()
 

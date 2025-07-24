@@ -39,7 +39,9 @@ mod tests {
         sheet.append(new_row);
 
         // Assert
-        let appended_row = sheet.iter_rows(true).last().unwrap();
+        let sheet_row_len = sheet.iter_rows().len();
+        let binding = sheet.iter_rows();
+        let appended_row = binding.get(sheet_row_len - 1).unwrap();
         assert_eq!(appended_row[0].value(), Some("foo".to_string()));
         assert_eq!(appended_row[1].value(), Some("bar".to_string()));
     }
@@ -49,11 +51,11 @@ mod tests {
         // 観点: 行をイテレートできるか
         let book = Book::new("data/sample.xlsx");
         let sheet = book.__getitem__("シート1".to_string());
-        let mut rows = sheet.iter_rows(true);
-        let first_row = rows.next().unwrap();
+        let rows = sheet.iter_rows();
+        let first_row = rows.first().unwrap();
         assert_eq!(first_row[0].value(), Some("1.0".to_string()));
         assert_eq!(first_row[1].value(), Some("3.0".to_string()));
-        let second_row = rows.next().unwrap();
+        let second_row = rows.first().unwrap();
         assert_eq!(second_row[0].value(), Some("2.0".to_string()));
         assert_eq!(second_row[1].value(), Some("4.0".to_string()));
     }

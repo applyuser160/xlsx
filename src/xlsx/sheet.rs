@@ -91,8 +91,7 @@ impl Sheet {
     }
 
     /// シート内の行のイテレータの取得
-    #[pyo3(signature = (values_only = false))]
-    pub fn iter_rows(&self, values_only: bool) -> IterRows {
+    pub fn iter_rows(&self) -> Vec<Vec<Cell>> {
         let xml: std::sync::MutexGuard<Xml> = self.xml.lock().unwrap();
         let worksheet: &crate::xml::XmlElement = &xml.elements[0];
         let sheet_data: &crate::xml::XmlElement = worksheet.get_element("sheetData");
@@ -101,62 +100,22 @@ impl Sheet {
             .iter()
             .map(|&x| x.clone())
             .collect();
-        IterRows {
-            values_only,
-            rows,
-            current_row: 0,
-            xml: self.xml.clone(),
-            shared_strings: self.shared_strings.clone(),
-            styles: self.styles.clone(),
-        }
-    }
-}
-/// 行のイテレータ
-#[pyclass]
-pub struct IterRows {
-    values_only: bool,
-    rows: Vec<crate::xml::XmlElement>,
-    current_row: usize,
-    xml: Arc<Mutex<Xml>>,
-    shared_strings: Arc<Mutex<Xml>>,
-    styles: Arc<Mutex<Xml>>,
-}
-
-impl Iterator for IterRows {
-    type Item = Vec<Cell>;
-
-    fn next(&mut self) -> Option<Self::Item> {
-        if self.current_row >= self.rows.len() {
-            return None;
-        }
-        let row_element: &crate::xml::XmlElement = &self.rows[self.current_row];
-        let cells: Vec<crate::xml::XmlElement> = row_element
-            .get_elements("c")
-            .iter()
-            .map(|&x| x.clone())
-            .collect();
-        let row: Vec<Cell> = cells
-            .iter()
-            .map(|cell_element| {
-                let address: String = cell_element.get_attribute("r").unwrap().to_string();
-                Cell::new(
-                    self.xml.clone(),
-                    self.shared_strings.clone(),
-                    self.styles.clone(),
-                    address,
-                )
+        rows.iter()
+            .map(|row| {
+                row.get_elements("c")
+                    .iter()
+                    .map(|cell| {
+                        let address: String = cell.get_attribute("r").unwrap().to_string();
+                        Cell::new(
+                            self.xml.clone(),
+                            self.shared_strings.clone(),
+                            self.styles.clone(),
+                            address,
+                        )
+                    })
+                    .collect()
             })
-            .collect();
-        self.current_row += 1;
-
-        // if self.values_only {
-        //     let values: Vec<String> = row
-        //         .iter()
-        //         .map(|cell| cell.value().unwrap().to_string())
-        //         .collect();
-        //     return Some(values);
-        // }
-        Some(row)
+            .collect()
     }
 }
 
