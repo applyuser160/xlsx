@@ -53,16 +53,12 @@ impl Sheet {
         let mut xml: std::sync::MutexGuard<Xml> = self.xml.lock().unwrap();
         let worksheet: &mut crate::xml::XmlElement = &mut xml.elements[0];
         let sheet_data: &mut crate::xml::XmlElement = worksheet.get_element_mut("sheetData");
-        let new_row_num: usize = if let Some(last_row) = sheet_data.get_elements("row").last() {
-            last_row
-                .get_attribute("r")
-                .unwrap()
-                .parse::<usize>()
-                .unwrap()
-                + 1
-        } else {
-            1
-        };
+        let new_row_num: usize = sheet_data
+            .get_elements("row")
+            .last()
+            .and_then(|last_row| last_row.get_attribute("r"))
+            .and_then(|r| r.parse::<usize>().ok())
+            .map_or(1, |num| num + 1);
 
         let mut row_element: XmlElement = XmlElement::new("row");
         row_element
@@ -196,27 +192,23 @@ impl Sheet {
 
     /// セルの値を取得
     fn get_cell_value(&self, cell: &crate::xml::XmlElement) -> String {
-        if let Some(v_element) = cell.get_elements("v").first() {
-            if let Some(value) = &v_element.text {
-                // セルのタイプを確認
-                if let Some(cell_type) = cell.get_attribute("t") {
-                    match cell_type.as_str() {
-                        "s" => {
-                            // 共有文字列の場合
-                            if let Ok(index) = value.parse::<usize>() {
-                                return self.get_shared_string_by_index(index);
-                            }
-                        }
-                        _ => {
-                            // その他のタイプはそのまま返す
-                            return value.clone();
-                        }
-                    }
-                }
-                return value.clone();
-            }
-        }
-        String::new()
+        cell.get_elements("v")
+            .first()
+            .and_then(|v| v.text.as_ref())
+            .map_or_else(String::new, |value| {
+                cell.get_attribute("t").map_or_else(
+                    || value.clone(),
+                    |cell_type| match cell_type.as_str() {
+                        "s" => value
+                            .parse::<usize>()
+                            .ok()
+                            .map_or_else(String::new, |index| {
+                                self.get_shared_string_by_index(index)
+                            }),
+                        _ => value.clone(),
+                    },
+                )
+            })
     }
 
     /// インデックスによる共有文字列の取得

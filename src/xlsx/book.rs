@@ -171,32 +171,33 @@ impl Book {
             panic!("No sheet named '{}'", sheet.name);
         }
 
-        let rid_to_remove: Option<String> = self
+        let mut rid_to_remove: Option<String> = None;
+        if let Some(sheets_tag) = self
             .workbook
             .elements
             .first_mut()
             .and_then(|wb| wb.children.iter_mut().find(|x| x.name == "sheets"))
-            .and_then(|sheets_tag| {
-                let rid = sheets_tag
-                    .children
-                    .iter()
-                    .find(|s| s.attributes.get("name").as_ref() == Some(&&sheet.name))
-                    .and_then(|s| s.attributes.get("r:id").cloned());
-                sheets_tag
-                    .children
-                    .retain(|s| s.attributes.get("name").as_ref() != Some(&&sheet.name));
-                rid
-            });
-
-        if let Some(rid) = rid_to_remove {
-            if let Some(relationships_tag) = self
-                .rels
-                .get_mut("xl/_rels/workbook.xml.rels")
-                .and_then(|rels| rels.elements.first_mut())
+        {
+            if let Some(sheet_to_remove) = sheets_tag
+                .children
+                .iter()
+                .find(|s| s.attributes.get("name") == Some(&sheet.name))
             {
+                rid_to_remove = sheet_to_remove.attributes.get("r:id").cloned();
+            }
+            sheets_tag
+                .children
+                .retain(|s| s.attributes.get("name") != Some(&sheet.name));
+        }
+
+        if let (Some(rid), Some(rels)) = (
+            rid_to_remove,
+            self.rels.get_mut("xl/_rels/workbook.xml.rels"),
+        ) {
+            if let Some(relationships_tag) = rels.elements.first_mut() {
                 relationships_tag
                     .children
-                    .retain(|r| r.attributes.get("Id").as_ref() != Some(&&rid))
+                    .retain(|r| r.attributes.get("Id") != Some(&rid));
             }
         }
     }
@@ -355,34 +356,36 @@ impl Book {
                     let mut contents: String = String::with_capacity(file.size() as usize);
                     if file.read_to_string(&mut contents).is_ok() {
                         if let Ok(xml) = Xml::new(&contents) {
-                            match name.as_str() {
-                                s if s.starts_with(DRAWINGS_PREFIX) => {
+                            match name {
+                                _ if name.starts_with(DRAWINGS_PREFIX) => {
                                     book.drawings.insert(name, xml);
                                 }
-                                s if s.starts_with(TABLES_PREFIX) => {
+                                _ if name.starts_with(TABLES_PREFIX) => {
                                     book.tables.insert(name, xml);
                                 }
-                                s if s.starts_with(PIVOT_TABLES_PREFIX) => {
+                                _ if name.starts_with(PIVOT_TABLES_PREFIX) => {
                                     book.pivot_tables.insert(name, xml);
                                 }
-                                s if s.starts_with(PIVOT_CACHES_PREFIX) => {
+                                _ if name.starts_with(PIVOT_CACHES_PREFIX) => {
                                     book.pivot_caches.insert(name, xml);
                                 }
-                                s if s.starts_with(THEME_PREFIX) => {
+                                _ if name.starts_with(THEME_PREFIX) => {
                                     book.themes.insert(name, xml);
                                 }
-                                s if s.starts_with(WORKSHEETS_PREFIX) => {
+                                _ if name.starts_with(WORKSHEETS_PREFIX) => {
                                     book.worksheets.insert(name, Arc::new(Mutex::new(xml)));
                                 }
-                                s if s.starts_with(WORKBOOK_RELS_PREFIX) => {
+                                _ if name.starts_with(WORKBOOK_RELS_PREFIX) => {
                                     book.rels.insert(name, xml);
                                 }
-                                s if s.starts_with(WORKSHEETS_RELS_PREFIX) => {
+                                _ if name.starts_with(WORKSHEETS_RELS_PREFIX) => {
                                     book.sheet_rels.insert(name, xml);
                                 }
-                                WORKBOOK_FILENAME => book.workbook = xml,
-                                STYLES_FILENAME => book.styles = Arc::new(Mutex::new(xml)),
-                                SHARED_STRINGS_FILENAME => {
+                                _ if name == WORKBOOK_FILENAME => book.workbook = xml,
+                                _ if name == STYLES_FILENAME => {
+                                    book.styles = Arc::new(Mutex::new(xml))
+                                }
+                                _ if name == SHARED_STRINGS_FILENAME => {
                                     let mut map = HashMap::new();
                                     if !xml.elements.is_empty() {
                                         for (i, si) in xml.elements[0].children.iter().enumerate() {
@@ -437,34 +440,56 @@ impl Book {
         let styles_filename_str: String = STYLES_FILENAME.to_string();
         let shared_strings_filename_str: String = SHARED_STRINGS_FILENAME.to_string();
 
-        xmls_with_paths.push((&workbook_filename_str, Box::new(&self.workbook)));
-        xmls_with_paths.push((&styles_filename_str, Box::new(&self.styles)));
-        xmls_with_paths.push((&shared_strings_filename_str, Box::new(&self.shared_strings)));
+        xmls_with_paths.extend([
+            (
+                &workbook_filename_str,
+                Box::new(&self.workbook) as Box<dyn ToXml>,
+            ),
+            (&styles_filename_str, Box::new(&self.styles)),
+            (&shared_strings_filename_str, Box::new(&self.shared_strings)),
+        ]);
 
-        self.rels
+        let iter_chain = self
+            .rels
             .iter()
-            .for_each(|(k, v)| xmls_with_paths.push((k, Box::new(v))));
-        self.drawings
-            .iter()
-            .for_each(|(k, v)| xmls_with_paths.push((k, Box::new(v))));
-        self.tables
-            .iter()
-            .for_each(|(k, v)| xmls_with_paths.push((k, Box::new(v))));
-        self.pivot_tables
-            .iter()
-            .for_each(|(k, v)| xmls_with_paths.push((k, Box::new(v))));
-        self.pivot_caches
-            .iter()
-            .for_each(|(k, v)| xmls_with_paths.push((k, Box::new(v))));
-        self.sheet_rels
-            .iter()
-            .for_each(|(k, v)| xmls_with_paths.push((k, Box::new(v))));
-        self.worksheets
-            .iter()
-            .for_each(|(k, v)| xmls_with_paths.push((k, Box::new(v))));
-        self.themes
-            .iter()
-            .for_each(|(k, v)| xmls_with_paths.push((k, Box::new(v))));
+            .map(|(k, v)| (k, Box::new(v) as Box<dyn ToXml>))
+            .chain(
+                self.drawings
+                    .iter()
+                    .map(|(k, v)| (k, Box::new(v) as Box<dyn ToXml>)),
+            )
+            .chain(
+                self.tables
+                    .iter()
+                    .map(|(k, v)| (k, Box::new(v) as Box<dyn ToXml>)),
+            )
+            .chain(
+                self.pivot_tables
+                    .iter()
+                    .map(|(k, v)| (k, Box::new(v) as Box<dyn ToXml>)),
+            )
+            .chain(
+                self.pivot_caches
+                    .iter()
+                    .map(|(k, v)| (k, Box::new(v) as Box<dyn ToXml>)),
+            )
+            .chain(
+                self.sheet_rels
+                    .iter()
+                    .map(|(k, v)| (k, Box::new(v) as Box<dyn ToXml>)),
+            )
+            .chain(
+                self.worksheets
+                    .iter()
+                    .map(|(k, v)| (k, Box::new(v) as Box<dyn ToXml>)),
+            )
+            .chain(
+                self.themes
+                    .iter()
+                    .map(|(k, v)| (k, Box::new(v) as Box<dyn ToXml>)),
+            );
+
+        xmls_with_paths.extend(iter_chain);
 
         if let Some(archive) = archive {
             let file_names: Vec<String> = archive.file_names().map(|s| s.to_string()).collect();

@@ -208,10 +208,7 @@ impl Xml {
             match reader.read_event_into(&mut buf)? {
                 Event::Start(e) => children.push(Self::parse_element(reader, &e)?),
                 Event::Text(e) => {
-                    let content: String = e.decode()?.to_string();
-                    if !content.trim().is_empty() {
-                        text = Some(content);
-                    }
+                    text = Some(e.decode()?.to_string());
                 }
                 Event::End(e) if e.name() == start_tag.name() => break,
                 Event::Empty(e) => children.push(Self::parse_empty_element(&e)?),
@@ -269,7 +266,7 @@ impl Xml {
             start.push_attribute((k.as_str(), v.as_str()));
         }
 
-        if element.children.is_empty() && element.text.is_none() {
+        if let (true, None) = (element.children.is_empty(), &element.text) {
             writer.write_event(Event::Empty(start))?;
         } else {
             writer.write_event(Event::Start(start))?;
@@ -299,7 +296,7 @@ impl Xml {
 
     /// `BytesStart` イベントからのタグ名の取得
     fn get_name(start_tag: &BytesStart) -> Result<String> {
-        Ok(String::from_utf8(start_tag.name().as_ref().to_vec())?)
+        Ok(String::from_utf8_lossy(start_tag.name().as_ref()).to_string())
     }
 
     /// `BytesStart` イベントからの属性の取得
@@ -308,7 +305,7 @@ impl Xml {
             .attributes()
             .map(|attr_result| {
                 let attr: quick_xml::events::attributes::Attribute<'_> = attr_result?;
-                let key: String = String::from_utf8(attr.key.as_ref().to_vec())?;
+                let key: String = String::from_utf8_lossy(attr.key.as_ref()).to_string();
                 let value: String = attr.unescape_value()?.to_string();
                 Ok((key, value))
             })

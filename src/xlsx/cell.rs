@@ -48,16 +48,15 @@ impl Cell {
     /// 値の型は自動的に検出
     #[setter]
     pub fn set_value(&mut self, value: String) {
-        if let Some(formula) = value.strip_prefix('=') {
-            self.set_formula_value(formula);
-        } else if let Ok(number) = value.parse::<f64>() {
-            self.set_number_value(number);
-        } else if let Ok(boolean) = value.parse::<bool>() {
-            self.set_bool_value(boolean);
-        } else if let Ok(datetime) = NaiveDateTime::parse_from_str(&value, "%Y-%m-%d %H:%M:%S") {
-            self.set_datetime_value(datetime);
-        } else {
-            self.set_string_value(&value);
+        match value {
+            _ if value.starts_with('=') => self.set_formula_value(&value[1..]),
+            _ if value.parse::<f64>().is_ok() => self.set_number_value(value.parse().unwrap()),
+            _ if value.parse::<bool>().is_ok() => self.set_bool_value(value.parse().unwrap()),
+            _ if NaiveDateTime::parse_from_str(&value, "%Y-%m-%d %H:%M:%S").is_ok() => self
+                .set_datetime_value(
+                    NaiveDateTime::parse_from_str(&value, "%Y-%m-%d %H:%M:%S").unwrap(),
+                ),
+            _ => self.set_string_value(&value),
         }
     }
 
@@ -160,23 +159,11 @@ impl Cell {
         let mut styles_xml: MutexGuard<Xml> = self.styles.lock().expect("Failed to lock styles");
         let fonts_tag: &mut XmlElement = styles_xml.get_mut_or_create_child_by_tag("fonts");
 
-        if let Some(index) = fonts_tag.children.iter().position(|f| {
-            let mut existing_font: Font = Font::default();
-            for child in &f.children {
-                match child.name.as_str() {
-                    "name" => existing_font.name = child.attributes.get("val").cloned(),
-                    "sz" => {
-                        existing_font.size =
-                            child.attributes.get("val").and_then(|s| s.parse().ok())
-                    }
-                    "b" => existing_font.bold = Some(true),
-                    "i" => existing_font.italic = Some(true),
-                    "color" => existing_font.color = child.attributes.get("rgb").cloned(),
-                    _ => {}
-                }
-            }
-            font == &existing_font
-        }) {
+        if let Some(index) = fonts_tag
+            .children
+            .iter()
+            .position(|f| Font::from_xml_element(f) == *font)
+        {
             return index;
         }
 
@@ -406,45 +393,51 @@ impl Cell {
 
     /// ワークシートXML内のセル要素の取得または作成
     fn get_or_create_cell_element<'a>(&self, xml: &'a mut Xml) -> &'a mut XmlElement {
-        let (row_num, _): (u32, u32) = self.decode_address();
-        let sheet_data: &mut XmlElement = xml
+        let (row_num, _) = self.decode_address();
+        let sheet_data = xml
             .elements
             .first_mut()
             .and_then(|ws| ws.children.iter_mut().find(|e| e.name == "sheetData"))
             .expect("sheetData not found in sheet xml");
 
-        let row_index: usize =
-            match sheet_data.children.iter().position(|r| {
-                r.name == "row" && r.attributes.get("r") == Some(&row_num.to_string())
-            }) {
-                Some(idx) => idx,
-                None => {
-                    let mut new_row: XmlElement = XmlElement::new("row");
-                    new_row
-                        .attributes
-                        .insert("r".to_string(), row_num.to_string());
-                    sheet_data.children.push(new_row);
-                    sheet_data.children.len() - 1
-                }
-            };
+        let row = Self::get_or_create_row(sheet_data, row_num);
+        Self::get_or_create_cell(row, &self.address)
+    }
 
-        let cell_index: usize = match sheet_data.children[row_index]
+    fn get_or_create_row(sheet_data: &mut XmlElement, row_num: u32) -> &mut XmlElement {
+        let position = sheet_data
             .children
             .iter()
-            .position(|c| c.name == "c" && c.attributes.get("r") == Some(&self.address))
-        {
-            Some(idx) => idx,
-            None => {
-                let mut new_cell: XmlElement = XmlElement::new("c");
-                new_cell
-                    .attributes
-                    .insert("r".to_string(), self.address.clone());
-                sheet_data.children[row_index].children.push(new_cell);
-                sheet_data.children[row_index].children.len() - 1
-            }
-        };
+            .position(|r| r.name == "row" && r.attributes.get("r") == Some(&row_num.to_string()));
 
-        &mut sheet_data.children[row_index].children[cell_index]
+        if let Some(pos) = position {
+            &mut sheet_data.children[pos]
+        } else {
+            let mut new_row = XmlElement::new("row");
+            new_row
+                .attributes
+                .insert("r".to_string(), row_num.to_string());
+            sheet_data.children.push(new_row);
+            sheet_data.children.last_mut().unwrap()
+        }
+    }
+
+    fn get_or_create_cell<'a>(row: &'a mut XmlElement, address: &str) -> &'a mut XmlElement {
+        let position = row
+            .children
+            .iter()
+            .position(|c| c.name == "c" && c.attributes.get("r") == Some(&address.to_string()));
+
+        if let Some(pos) = position {
+            &mut row.children[pos]
+        } else {
+            let mut new_cell = XmlElement::new("c");
+            new_cell
+                .attributes
+                .insert("r".to_string(), address.to_string());
+            row.children.push(new_cell);
+            row.children.last_mut().unwrap()
+        }
     }
 
     /// 共有文字列XML内の共有文字列の取得または作成
