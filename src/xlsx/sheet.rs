@@ -3,7 +3,7 @@ use std::sync::{Arc, Mutex};
 use pyo3::prelude::*;
 
 use crate::cell::Cell;
-use crate::xml::Xml;
+use crate::xml::{Xml, XmlElement};
 
 use std::collections::HashMap;
 
@@ -49,65 +49,65 @@ impl Sheet {
 
     /// シートへの行の追加
     pub fn append(&self, row_data: Vec<String>) {
-        use crate::xml::XmlElement;
-        let mut xml: std::sync::MutexGuard<Xml> = self.xml.lock().unwrap();
-        let worksheet: &mut crate::xml::XmlElement = &mut xml.elements[0];
-        let sheet_data: &mut crate::xml::XmlElement = worksheet.get_element_mut("sheetData");
-        let new_row_num: usize = sheet_data
-            .get_elements("row")
-            .last()
-            .and_then(|last_row| last_row.get_attribute("r"))
-            .and_then(|r| r.parse::<usize>().ok())
-            .map_or(1, |num| num + 1);
+        if let Ok(mut xml) = self.xml.lock() {
+            if let Some(worksheet) = xml.elements.first_mut() {
+                let sheet_data = worksheet.get_element_mut("sheetData");
+                let new_row_num: usize = sheet_data
+                    .get_elements("row")
+                    .last()
+                    .and_then(|last_row| last_row.get_attribute("r"))
+                    .and_then(|r| r.parse::<usize>().ok())
+                    .map_or(1, |num| num + 1);
 
-        let mut row_element: XmlElement = XmlElement::new("row");
-        row_element
-            .attributes
-            .insert("r".to_string(), new_row_num.to_string());
+                let mut row_element = XmlElement::new("row");
+                row_element
+                    .attributes
+                    .insert("r".to_string(), new_row_num.to_string());
 
-        for (i, cell_data) in row_data.iter().enumerate() {
-            let col_str: String = Self::col_to_string(i + 1);
-            let mut cell_element: XmlElement = XmlElement::new("c");
-            cell_element
-                .attributes
-                .insert("r".to_string(), format!("{col_str}{new_row_num}"));
+                for (i, cell_data) in row_data.iter().enumerate() {
+                    let col_str: String = Self::col_to_string(i + 1);
+                    let mut cell_element = XmlElement::new("c");
+                    cell_element
+                        .attributes
+                        .insert("r".to_string(), format!("{col_str}{new_row_num}"));
 
-            // 共有文字列テーブルへの追加
-            let shared_string_id: usize = self.add_shared_string(&cell_data.to_string());
+                    // 共有文字列テーブルへの追加
+                    let shared_string_id: usize = self.add_shared_string(cell_data);
 
-            cell_element
-                .attributes
-                .insert("t".to_string(), "s".to_string());
-            let mut v_element: XmlElement = XmlElement::new("v");
-            v_element.text = Some(shared_string_id.to_string());
-            cell_element.children.push(v_element);
-            row_element.children.push(cell_element);
+                    cell_element
+                        .attributes
+                        .insert("t".to_string(), "s".to_string());
+                    let mut v_element = XmlElement::new("v");
+                    v_element.text = Some(shared_string_id.to_string());
+                    cell_element.children.push(v_element);
+                    row_element.children.push(cell_element);
+                }
+                sheet_data.children.push(row_element);
+            }
         }
-        sheet_data.children.push(row_element);
     }
 
     /// シート内の行のイテレータの取得
     pub fn iter_rows(&self) -> Vec<Vec<String>> {
-        let xml = self.xml.lock().unwrap();
-        let worksheet = &xml.elements[0];
-        let sheet_data = worksheet.get_element("sheetData");
-        let rows = sheet_data.get_elements("row");
-
-        let mut result = Vec::new();
-
-        for row in rows {
-            let mut row_data = Vec::new();
-            let cells = row.get_elements("c");
-
-            for cell in cells {
-                let cell_value = self.get_cell_value(cell);
-                row_data.push(cell_value);
-            }
-
-            result.push(row_data);
-        }
-
-        result
+        self.xml
+            .lock()
+            .ok()
+            .and_then(|xml| {
+                xml.elements.first().map(|worksheet| {
+                    worksheet
+                        .get_element("sheetData")
+                        .get_elements("row")
+                        .iter()
+                        .map(|row| {
+                            row.get_elements("c")
+                                .iter()
+                                .map(|cell| self.get_cell_value(cell).unwrap_or_default())
+                                .collect()
+                        })
+                        .collect::<Vec<Vec<String>>>()
+                })
+            })
+            .unwrap_or_default()
     }
 }
 
@@ -131,40 +131,38 @@ impl Sheet {
 
     /// 共有文字列テーブルへの文字列の追加
     fn add_shared_string(&self, s: &str) -> usize {
-        let mut shared_strings_map = self.shared_strings_map.lock().unwrap();
-        if let Some(&id) = shared_strings_map.get(s) {
-            return id;
+        if let Ok(mut map) = self.shared_strings_map.lock() {
+            if let Some(&id) = map.get(s) {
+                return id;
+            }
+            if let Ok(mut strings) = self.shared_strings.lock() {
+                if strings.elements.is_empty() {
+                    let mut sst = XmlElement::new("sst");
+                    sst.attributes.insert(
+                        "xmlns".to_string(),
+                        "http://schemas.openxmlformats.org/spreadsheetml/2006/main".to_string(),
+                    );
+                    strings.elements.push(sst);
+                }
+                let sst = &mut strings.elements[0];
+                let mut si = XmlElement::new("si");
+                let mut t = XmlElement::new("t");
+                t.text = Some(s.to_string());
+                si.children.push(t);
+                sst.children.push(si);
+
+                let count = sst.children.len();
+                sst.attributes
+                    .insert("count".to_string(), count.to_string());
+                sst.attributes
+                    .insert("uniqueCount".to_string(), count.to_string());
+
+                let new_id = count - 1;
+                map.insert(s.to_string(), new_id);
+                return new_id;
+            }
         }
-
-        let mut shared_strings = self.shared_strings.lock().unwrap();
-        if shared_strings.elements.is_empty() {
-            use crate::xml::XmlElement;
-            let mut sst = XmlElement::new("sst");
-            sst.attributes.insert(
-                "xmlns".to_string(),
-                "http://schemas.openxmlformats.org/spreadsheetml/2006/main".to_string(),
-            );
-            shared_strings.elements.push(sst);
-        }
-        let sst = &mut shared_strings.elements[0];
-
-        // 新しい文字列の追加
-        use crate::xml::XmlElement;
-        let mut si = XmlElement::new("si");
-        let mut t = XmlElement::new("t");
-        t.text = Some(s.to_string());
-        si.children.push(t);
-        sst.children.push(si);
-
-        let count = sst.children.len();
-        sst.attributes
-            .insert("count".to_string(), count.to_string());
-        sst.attributes
-            .insert("uniqueCount".to_string(), count.to_string());
-
-        let new_id = count - 1;
-        shared_strings_map.insert(s.to_string(), new_id);
-        new_id
+        0
     }
 
     #[cfg(test)]
@@ -191,38 +189,26 @@ impl Sheet {
     }
 
     /// セルの値を取得
-    fn get_cell_value(&self, cell: &crate::xml::XmlElement) -> String {
-        cell.get_elements("v")
-            .first()
-            .and_then(|v| v.text.as_ref())
-            .map_or_else(String::new, |value| {
-                cell.get_attribute("t").map_or_else(
-                    || value.clone(),
-                    |cell_type| match cell_type.as_str() {
-                        "s" => value
-                            .parse::<usize>()
-                            .ok()
-                            .map_or_else(String::new, |index| {
-                                self.get_shared_string_by_index(index)
-                            }),
-                        _ => value.clone(),
-                    },
-                )
-            })
+    fn get_cell_value(&self, cell: &XmlElement) -> Option<String> {
+        let value_element = cell.get_element("v");
+        let value = value_element.text.as_ref()?.clone();
+        match cell.get_attribute("t").map(String::as_str) {
+            Some("s") => {
+                let index: usize = value.parse().ok()?;
+                self.get_shared_string_by_index(index)
+            }
+            _ => Some(value),
+        }
     }
 
     /// インデックスによる共有文字列の取得
-    fn get_shared_string_by_index(&self, index: usize) -> String {
-        let shared_strings = self.shared_strings.lock().unwrap();
-        if let Some(sst) = shared_strings.elements.first() {
-            if let Some(si) = sst.children.get(index) {
-                if let Some(t) = si.get_elements("t").first() {
-                    if let Some(text) = &t.text {
-                        return text.clone();
-                    }
-                }
-            }
-        }
-        String::new()
+    fn get_shared_string_by_index(&self, index: usize) -> Option<String> {
+        self.shared_strings.lock().ok().and_then(|shared_strings| {
+            shared_strings.elements.first().and_then(|sst| {
+                sst.children
+                    .get(index)
+                    .and_then(|si| si.get_element("t").text.clone())
+            })
+        })
     }
 }
