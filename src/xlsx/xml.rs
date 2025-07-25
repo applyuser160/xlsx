@@ -26,7 +26,7 @@ type Result<T> = std::result::Result<T, XmlError>;
 
 /// XMLファイル
 #[pyclass]
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, Default)]
 pub struct Xml {
     /// XML宣言
     pub decl: HashMap<String, String>,
@@ -48,19 +48,19 @@ impl XmlElement {
 
 impl XmlElement {
     pub fn get_element(&self, path: &str) -> &XmlElement {
-        let mut current_element = self;
+        let mut current_element: &XmlElement = self;
         for tag in path.split('>') {
             current_element = current_element
                 .children
                 .iter()
                 .find(|c| c.name == tag)
-                .unwrap();
+                .unwrap_or_else(|| panic!("Element not found: {tag} in path: {path}"));
         }
         current_element
     }
 
     pub fn get_elements(&self, path: &str) -> Vec<&XmlElement> {
-        let mut current_elements = vec![self];
+        let mut current_elements: Vec<&XmlElement> = vec![self];
         for tag in path.split('>') {
             current_elements = current_elements
                 .iter()
@@ -71,13 +71,15 @@ impl XmlElement {
     }
 
     pub fn get_element_mut(&mut self, path: &str) -> &mut XmlElement {
-        let mut current_element = self;
+        let mut current_element: &mut XmlElement = self;
         for tag in path.split('>') {
+            let path_clone = path.to_string();
+            let tag_clone = tag.to_string();
             current_element = current_element
                 .children
                 .iter_mut()
                 .find(|c| c.name == tag)
-                .unwrap();
+                .unwrap_or_else(|| panic!("Element not found: {tag_clone} in path: {path_clone}"));
         }
         current_element
     }
@@ -106,21 +108,17 @@ impl Xml {
     ///
     /// 子要素が存在しない場合は作成
     pub fn get_mut_or_create_child_by_tag(&mut self, tag_name: &str) -> &mut XmlElement {
-        let style_sheet: &mut XmlElement = match self.elements.first_mut() {
-            Some(element) => element,
-            None => panic!("No elements in XML"),
-        };
-        // 子要素の検索
+        let style_sheet: &mut XmlElement = self.elements.first_mut().expect("No elements in XML");
+
         if let Some(pos) = style_sheet.children.iter().position(|c| c.name == tag_name) {
             &mut style_sheet.children[pos]
         } else {
-            // 新規作成して返却
             let new_element: XmlElement = XmlElement::new(tag_name);
             style_sheet.children.push(new_element);
-            match style_sheet.children.last_mut() {
-                Some(element) => element,
-                None => panic!("Failed to add new element"),
-            }
+            style_sheet
+                .children
+                .last_mut()
+                .expect("Failed to add new element")
         }
     }
 }

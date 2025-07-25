@@ -26,21 +26,16 @@ impl Cell {
     /// セルの値の取得
     #[getter]
     pub fn value(&self) -> Option<String> {
-        let xml: MutexGuard<Xml> = self.sheet_xml.lock().expect("Failed to lock sheet xml");
+        let xml: MutexGuard<Xml> = self.sheet_xml.lock().ok()?;
         let worksheet: &XmlElement = xml.elements.first()?;
-        let sheet_data: &XmlElement = worksheet.children.iter().find(|e| e.name == "sheetData")?;
+        let sheet_data: &XmlElement = worksheet.get_element("sheetData");
 
         sheet_data
-            .children
+            .get_elements("row")
             .iter()
-            .filter(|r| r.name == "row")
-            .flat_map(|row| &row.children)
-            .filter(|c| c.name == "c")
+            .flat_map(|row| row.get_elements("c"))
             .find(|cell_element| cell_element.attributes.get("r") == Some(&self.address))
-            .map(|cell_element| {
-                self.get_value_from_cell_element(cell_element)
-                    .unwrap_or_default()
-            })
+            .and_then(|cell_element| self.get_value_from_cell_element(cell_element))
     }
 
     /// セルの値の設定
@@ -48,15 +43,16 @@ impl Cell {
     /// 値の型は自動的に検出
     #[setter]
     pub fn set_value(&mut self, value: String) {
-        match value {
-            _ if value.starts_with('=') => self.set_formula_value(&value[1..]),
-            _ if value.parse::<f64>().is_ok() => self.set_number_value(value.parse().unwrap()),
-            _ if value.parse::<bool>().is_ok() => self.set_bool_value(value.parse().unwrap()),
-            _ if NaiveDateTime::parse_from_str(&value, "%Y-%m-%d %H:%M:%S").is_ok() => self
-                .set_datetime_value(
-                    NaiveDateTime::parse_from_str(&value, "%Y-%m-%d %H:%M:%S").unwrap(),
-                ),
-            _ => self.set_string_value(&value),
+        if let Some(formula) = value.strip_prefix('=') {
+            self.set_formula_value(formula);
+        } else if let Ok(num) = value.parse::<f64>() {
+            self.set_number_value(num);
+        } else if let Ok(b) = value.parse::<bool>() {
+            self.set_bool_value(b);
+        } else if let Ok(dt) = NaiveDateTime::parse_from_str(&value, "%Y-%m-%d %H:%M:%S") {
+            self.set_datetime_value(dt);
+        } else {
+            self.set_string_value(&value);
         }
     }
 
@@ -71,14 +67,14 @@ impl Cell {
     fn set_font(&mut self, font: Font) {
         self.font = Some(font.clone());
         let font_id: usize = self.add_font_to_styles(&font);
-        let fill_id: usize =
-            self.add_fill_to_styles(self.fill.as_ref().unwrap_or(&PatternFill::default()));
+        let fill_id: usize = self.add_fill_to_styles(&self.fill.clone().unwrap_or_default());
         let xf_id: usize = self.add_xf_to_styles(font_id, fill_id, 0, 0);
-        let mut xml: MutexGuard<Xml> = self.sheet_xml.lock().expect("Failed to lock sheet xml");
-        let cell_element: &mut XmlElement = self.get_or_create_cell_element(&mut xml);
-        cell_element
-            .attributes
-            .insert("s".to_string(), xf_id.to_string());
+        if let Ok(mut xml) = self.sheet_xml.lock() {
+            let cell_element: &mut XmlElement = self.get_or_create_cell_element(&mut xml);
+            cell_element
+                .attributes
+                .insert("s".to_string(), xf_id.to_string());
+        }
     }
 
     /// セルの塗りつぶしの取得
@@ -91,15 +87,15 @@ impl Cell {
     #[setter]
     fn set_fill(&mut self, fill: PatternFill) {
         self.fill = Some(fill.clone());
-        let font_id: usize =
-            self.add_font_to_styles(self.font.as_ref().unwrap_or(&Font::default()));
+        let font_id: usize = self.add_font_to_styles(&self.font.clone().unwrap_or_default());
         let fill_id: usize = self.add_fill_to_styles(&fill);
         let xf_id: usize = self.add_xf_to_styles(font_id, fill_id, 0, 0);
-        let mut xml: MutexGuard<Xml> = self.sheet_xml.lock().expect("Failed to lock sheet xml");
-        let cell_element: &mut XmlElement = self.get_or_create_cell_element(&mut xml);
-        cell_element
-            .attributes
-            .insert("s".to_string(), xf_id.to_string());
+        if let Ok(mut xml) = self.sheet_xml.lock() {
+            let cell_element: &mut XmlElement = self.get_or_create_cell_element(&mut xml);
+            cell_element
+                .attributes
+                .insert("s".to_string(), xf_id.to_string());
+        }
     }
 }
 
@@ -123,35 +119,26 @@ impl Cell {
 
     /// セル要素からの値の取得
     fn get_value_from_cell_element(&self, cell_element: &XmlElement) -> Option<String> {
-        match cell_element.attributes.get("t").map(|s| s.as_str()) {
+        match cell_element.attributes.get("t").map(String::as_str) {
             Some("s") => self.get_shared_string_value(cell_element),
             Some("inlineStr") => self.get_inline_string_value(cell_element),
-            _ => cell_element
-                .children
-                .iter()
-                .find(|e| e.name == "v")
-                .and_then(|v| v.text.clone()),
+            _ => cell_element.get_element("v").text.clone(),
         }
     }
 
     /// 共有文字列の値の取得
     fn get_shared_string_value(&self, cell_element: &XmlElement) -> Option<String> {
-        let v_element: &XmlElement = cell_element.children.iter().find(|e| e.name == "v")?;
+        let v_element: &XmlElement = cell_element.get_element("v");
         let idx: usize = v_element.text.as_ref()?.parse::<usize>().ok()?;
-        let shared_strings_xml: MutexGuard<Xml> = self
-            .shared_strings
-            .lock()
-            .expect("Failed to lock shared strings");
+        let shared_strings_xml: MutexGuard<Xml> = self.shared_strings.lock().ok()?;
         let sst: &XmlElement = shared_strings_xml.elements.first()?;
         let si: &XmlElement = sst.children.get(idx)?;
-        si.children.first().and_then(|t| t.text.clone())
+        si.get_element("t").text.clone()
     }
 
     /// インライン文字列の値の取得
     fn get_inline_string_value(&self, cell_element: &XmlElement) -> Option<String> {
-        let is_element: &XmlElement = cell_element.children.iter().find(|e| e.name == "is")?;
-        let t_element: &XmlElement = is_element.children.iter().find(|e| e.name == "t")?;
-        t_element.text.clone()
+        cell_element.get_element("is>t").text.clone()
     }
 
     /// スタイルXMLへのフォントの追加とフォントIDの返却
@@ -350,9 +337,9 @@ impl Cell {
         // 日時をExcelのシリアル値に変換
         // https://stackoverflow.com/questions/61546133/int-to-datetime-excel に基づく
         let excel_epoch: NaiveDateTime = NaiveDate::from_ymd_opt(1899, 12, 30)
-            .expect("Invalid date")
+            .unwrap_or_default()
             .and_hms_opt(0, 0, 0)
-            .expect("Invalid time");
+            .unwrap_or_default();
         let duration = value.signed_duration_since(excel_epoch);
         let serial: f64 = duration.num_seconds() as f64 / 86400.0;
         self.set_number_value(serial);
@@ -397,7 +384,7 @@ impl Cell {
         let sheet_data = xml
             .elements
             .first_mut()
-            .and_then(|ws| ws.children.iter_mut().find(|e| e.name == "sheetData"))
+            .map(|ws| ws.get_element_mut("sheetData"))
             .expect("sheetData not found in sheet xml");
 
         let row = Self::get_or_create_row(sheet_data, row_num);
@@ -479,9 +466,7 @@ impl Cell {
             .chars()
             .filter(|c| c.is_ascii_digit())
             .collect();
-        let row: u32 = row_str
-            .parse::<u32>()
-            .expect("Invalid row number in address");
+        let row: u32 = row_str.parse::<u32>().unwrap_or_default();
         let col: u32 = col_str
             .to_uppercase()
             .chars()
