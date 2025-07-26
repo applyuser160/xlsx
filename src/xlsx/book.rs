@@ -346,7 +346,8 @@ impl Book {
             let reader: BufReader<File> = BufReader::new(file);
             if let Ok(mut archive) = ZipArchive::new(reader) {
                 book.path = path.to_string();
-                for i in 0..archive.len() {
+                let archive_len: usize = archive.len();
+                for i in 0..archive_len {
                     if let Ok(mut file) = archive.by_index(i) {
                         let name: String = file.name().to_string();
 
@@ -382,12 +383,12 @@ impl Book {
                                         WORKBOOK_FILENAME => book.workbook = xml,
                                         STYLES_FILENAME => book.styles = Arc::new(Mutex::new(xml)),
                                         SHARED_STRINGS_FILENAME => {
-                                            let mut map = HashMap::new();
+                                            let mut map: HashMap<String, usize> = HashMap::new();
                                             if !xml.elements.is_empty() {
                                                 for (i, si) in
                                                     xml.elements[0].children.iter().enumerate()
                                                 {
-                                                    let s =
+                                                    let s: String =
                                                         si.get_element("t").get_text().to_string();
                                                     map.insert(s, i);
                                                 }
