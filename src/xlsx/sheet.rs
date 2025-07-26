@@ -51,7 +51,7 @@ impl Sheet {
     pub fn append(&self, row_data: Vec<String>) {
         if let Ok(mut xml) = self.xml.lock() {
             if let Some(worksheet) = xml.elements.first_mut() {
-                let sheet_data = worksheet.get_element_mut("sheetData");
+                let sheet_data: &mut XmlElement = worksheet.get_element_mut("sheetData");
                 let new_row_num: usize = sheet_data
                     .get_elements("row")
                     .last()
@@ -59,14 +59,17 @@ impl Sheet {
                     .and_then(|r| r.parse::<usize>().ok())
                     .map_or(1, |num| num + 1);
 
-                let mut row_element = XmlElement::new("row");
+                let mut row_element: XmlElement = XmlElement::new("row");
                 row_element
                     .attributes
                     .insert("r".to_string(), new_row_num.to_string());
 
+                let cell_count: usize = row_data.len();
+                row_element.children.reserve(cell_count);
+
                 for (i, cell_data) in row_data.iter().enumerate() {
                     let col_str: String = Self::col_to_string(i + 1);
-                    let mut cell_element = XmlElement::new("c");
+                    let mut cell_element: XmlElement = XmlElement::new("c");
                     cell_element
                         .attributes
                         .insert("r".to_string(), format!("{col_str}{new_row_num}"));
@@ -77,7 +80,7 @@ impl Sheet {
                     cell_element
                         .attributes
                         .insert("t".to_string(), "s".to_string());
-                    let mut v_element = XmlElement::new("v");
+                    let mut v_element: XmlElement = XmlElement::new("v");
                     v_element.text = Some(shared_string_id.to_string());
                     cell_element.children.push(v_element);
                     row_element.children.push(cell_element);
@@ -94,17 +97,21 @@ impl Sheet {
             .ok()
             .and_then(|xml| {
                 xml.elements.first().map(|worksheet| {
-                    worksheet
-                        .get_element("sheetData")
-                        .get_elements("row")
-                        .iter()
-                        .map(|row| {
-                            row.get_elements("c")
-                                .iter()
-                                .map(|cell| self.get_cell_value(cell).unwrap_or_default())
-                                .collect()
-                        })
-                        .collect::<Vec<Vec<String>>>()
+                    let sheet_data: &XmlElement = worksheet.get_element("sheetData");
+                    let rows: Vec<&XmlElement> = sheet_data.get_elements("row");
+                    let mut result: Vec<Vec<String>> = Vec::with_capacity(rows.len());
+
+                    for row in rows {
+                        let cells: Vec<&XmlElement> = row.get_elements("c");
+                        let mut row_values: Vec<String> = Vec::with_capacity(cells.len());
+
+                        for cell in cells {
+                            let cell_value: String = self.get_cell_value(cell).unwrap_or_default();
+                            row_values.push(cell_value);
+                        }
+                        result.push(row_values);
+                    }
+                    result
                 })
             })
             .unwrap_or_default()
@@ -137,27 +144,27 @@ impl Sheet {
             }
             if let Ok(mut strings) = self.shared_strings.lock() {
                 if strings.elements.is_empty() {
-                    let mut sst = XmlElement::new("sst");
+                    let mut sst: XmlElement = XmlElement::new("sst");
                     sst.attributes.insert(
                         "xmlns".to_string(),
                         "http://schemas.openxmlformats.org/spreadsheetml/2006/main".to_string(),
                     );
                     strings.elements.push(sst);
                 }
-                let sst = &mut strings.elements[0];
-                let mut si = XmlElement::new("si");
-                let mut t = XmlElement::new("t");
+                let sst: &mut XmlElement = &mut strings.elements[0];
+                let mut si: XmlElement = XmlElement::new("si");
+                let mut t: XmlElement = XmlElement::new("t");
                 t.text = Some(s.to_string());
                 si.children.push(t);
                 sst.children.push(si);
 
-                let count = sst.children.len();
+                let count: usize = sst.children.len();
                 sst.attributes
                     .insert("count".to_string(), count.to_string());
                 sst.attributes
                     .insert("uniqueCount".to_string(), count.to_string());
 
-                let new_id = count - 1;
+                let new_id: usize = count - 1;
                 map.insert(s.to_string(), new_id);
                 return new_id;
             }
@@ -178,10 +185,10 @@ impl Sheet {
 
     /// 列番号のアルファベットへの変換
     fn col_to_string(col: usize) -> String {
-        let mut result = String::new();
-        let mut n = col;
+        let mut result: String = String::new();
+        let mut n: usize = col;
         while n > 0 {
-            let rem = (n - 1) % 26;
+            let rem: usize = (n - 1) % 26;
             result.insert(0, (b'A' + rem as u8) as char);
             n = (n - 1) / 26;
         }
@@ -190,8 +197,8 @@ impl Sheet {
 
     /// セルの値を取得
     fn get_cell_value(&self, cell: &XmlElement) -> Option<String> {
-        let value_element = cell.get_element("v");
-        let value = value_element.text.as_ref()?.clone();
+        let value_element: &XmlElement = cell.get_element("v");
+        let value: String = value_element.text.as_ref()?.clone();
         match cell.get_attribute("t").map(String::as_str) {
             Some("s") => {
                 let index: usize = value.parse().ok()?;
