@@ -7,7 +7,7 @@
 ``` sh
 python -m venv .env
 .env/Scripts/activate
-.env/Scripts/python -m pip intall --upgrade pip
+.env/Scripts/python -m pip install --upgrade pip
 pip intall pre-commit
 pre-commit install
 pip install maturin
@@ -19,7 +19,7 @@ cargo add cargo-llvm-cov
 ``` sh
 python -m venv .env
 source .env/bin/activate
-./env/bin/python -m pip intall --upgrade pip
+.env/bin/python -m pip install --upgrade pip
 pip intall pre-commit
 pre-commit install
 pip install maturin
